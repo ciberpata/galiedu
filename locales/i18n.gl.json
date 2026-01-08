@@ -403,5 +403,9 @@
     "plan_delete_confirm": "Borrar este plan? Os usuarios asignados pasarán ao Plan Gratuíto (ID 1).",
     "plan_saved": "Plan gardado correctamente.",
     "tooltip_questions_created": "Total de preguntas creadas",
-    "my_history": "O Meu Historial"
+    "my_history": "O Meu Historial",
+    "spectacular_background_effect": "Apagar/Encender efecto de fondo",
+    "trash": "Papeleira", 
+    "delete_selection": "Borrar selección",
+    "restore_selection": "Restaurar selección"
 }

@@ -403,5 +403,9 @@
     "plan_delete_confirm": "Delete this plan? Assigned users will be moved to the Free Plan (ID 1).",
     "plan_saved": "Plan saved successfully.",
     "tooltip_questions_created": "Total number of questions created",
-    "my_history": "My History"
+    "my_history": "My History",
+    "spectacular_background_effect": "Turn background effect on/off",
+    "trash": "Trash", 
+    "delete_selection": "Delete selection",
+    "restore_selection": "Restore selection"
 }
