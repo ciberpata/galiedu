@@ -723,6 +723,67 @@ th.sortable:hover { background-color: rgba(0,0,0,0.05); }
     background-color: #dc2626; /* Un rojo un poco más oscuro */
 }
 
+
+
+/* --- FUNDAMENTOS RESPONSIVOS Y ACCESIBILIDAD --- */
+#bg-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none; /* ESTO PERMITE QUE LOS ICONOS FUNCIONEN AL HACER CLIC */
+}
+
+/* Efecto Cristal (Glassmorphism) para tarjetas destacadas */
+.card-spectacular {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    transition: transform 0.3s ease, background 0.3s ease;
+}
+
+body.dark .card-spectacular {
+    background: rgba(15, 23, 42, 0.4);
+}
+
+/* Ajustes Responsive críticos para móviles */
+@media (max-width: 768px) {
+    .header-page-title span { display: none; } /* Solo icono en móviles muy pequeños para ahorrar espacio */
+    .header-actions { gap: 4px; }
+    .btn-mini { width: 32px; height: 32px; }
+    
+    /* Mejorar toque en móviles (A11y) */
+    .nav-item, .btn-primary, .btn-icon {
+        min-height: 44px; /* Tamaño mínimo recomendado por Apple/Google */
+    }
+}
+
+/* Soporte para Marca Blanca */
+.white-label-hidden {
+    display: none !important;
+}
+
+/* Eliminar scroll horizontal de la tabla y permitir ajuste de texto */
+.table-container table {
+    min-width: auto !important; /* Quita el mínimo de 800px */
+    width: 100%;
+}
+
+.table-container td {
+    white-space: normal !important; /* Permite que el texto de la pregunta baje de línea */
+    word-wrap: break-word;
+    max-width: 300px; /* Ajusta según prefieras el ancho de la columna pregunta */
+}
+
+/* Evitar que los iconos de acción se amontonen */
+.text-right {
+    white-space: nowrap !important; /* Los botones de acción sí deben ir en una línea */
+}
 /* =========================================
    MEDIA QUERIES (RESPONSIVE)
    ========================================= */
