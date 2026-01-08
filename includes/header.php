@@ -32,7 +32,7 @@ $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
 </script>
 
 <header class="top-header">
-    
+        <canvas id="bg-canvas"></canvas>
     <div class="header-left">
         <button id="sidebarToggle" class="btn-icon mobile-only" title="Abrir Menú">
             <i class="fa-solid fa-bars"></i>
@@ -75,74 +75,124 @@ $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
             <i class="fa-solid fa-moon"></i>
         </button>
 
+        <button onclick="toggleBackgroundEffect()" class="btn-icon btn-mini" title="<?php echo __('spectacular_background_effect'); ?>">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </button>
+
         <a href="logout" onclick="sessionStorage.clear();" class="btn-icon btn-mini btn-logout-custom" title="Cerrar Sesión">
             <i class="fa-solid fa-power-off"></i>
         </a>
     </div>
+
 </header>
 
 <script>
+// 1. FUNCIONES GLOBALES (Mantener fuera para asegurar funcionamiento de iconos)
+window.toggleHeaderMenu = function(menuId) {
+    document.querySelectorAll('.dropdown-content').forEach(menu => {
+        if (menu.id !== menuId) menu.classList.remove('show');
+    });
+    const menu = document.getElementById(menuId);
+    if (menu) menu.classList.toggle('show');
+};
+
+window.changeLanguage = function(lang) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('lang', lang);
+    window.location.href = url.toString();
+};
+
+window.setSessionTheme = function(hue) {
+    document.documentElement.style.setProperty('--hue', hue);
+    sessionStorage.setItem('temp_theme_color', hue);
+    const colorMenu = document.getElementById('colorMenu');
+    if (colorMenu) colorMenu.classList.remove('show');
+};
+
+window.toggleBackgroundEffect = function() {
+    const canvas = document.getElementById('bg-canvas');
+    const isHidden = localStorage.getItem('hide_bg_canvas') === 'true';
+    if (isHidden) {
+        localStorage.setItem('hide_bg_canvas', 'false');
+        if (canvas) canvas.style.display = 'block';
+    } else {
+        localStorage.setItem('hide_bg_canvas', 'true');
+        if (canvas) canvas.style.display = 'none';
+    }
+};
+
 document.addEventListener('DOMContentLoaded', function() {
-    
-    // 1. FUNCIONALIDAD DEL BURGUER (Sidebar)
-    const toggleBtn = document.getElementById('sidebarToggle');
-    // Buscamos la sidebar y el overlay (fondo oscuro)
+    // 2. SIDEBAR Y ESTADO INICIAL
     const sidebar = document.querySelector('.sidebar');
-    const overlay = document.querySelector('.sidebar-overlay'); // Asegúrate de que este div exista en tu layout principal
+    const toggleBtn = document.getElementById('sidebarToggle');
+    const canvas = document.getElementById('bg-canvas');
+
+    if (localStorage.getItem('hide_bg_canvas') === 'true' && canvas) {
+        canvas.style.display = 'none';
+    }
 
     if (toggleBtn && sidebar) {
-        toggleBtn.addEventListener('click', function(e) {
-            e.stopPropagation(); // Evita que el clic se propague
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             sidebar.classList.toggle('active');
-            
-            // Si tienes un overlay, actívalo también
-            if (overlay) overlay.style.display = sidebar.classList.contains('active') ? 'block' : 'none';
         });
+    }
 
-        // Cerrar al hacer clic fuera (en el documento o overlay)
-        document.addEventListener('click', function(e) {
-            if (sidebar.classList.contains('active') && 
-                !sidebar.contains(e.target) && 
-                !toggleBtn.contains(e.target)) {
-                
-                sidebar.classList.remove('active');
-                if (overlay) overlay.style.display = 'none';
+    // 3. MOTOR CANVAS - VALORES INTERMEDIOS (Visible pero elegante)
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        const particleCount = 60; // Valor intermedio (antes 40, original 75)
+
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 2 + 0.5, // Tamaño intermedio
+                    vX: (Math.random() - 0.5) * 0.3, // Velocidad intermedia (antes 0.2)
+                    vY: (Math.random() - 0.5) * 0.3
+                });
             }
-        });
-    }
-
-    // 2. FUNCIONALIDAD DE MENÚS DESPLEGABLES (Header)
-    window.toggleHeaderMenu = function(menuId) {
-        // Cierra otros menús primero
-        document.querySelectorAll('.dropdown-content').forEach(menu => {
-            if (menu.id !== menuId) menu.classList.remove('show');
-        });
-
-        // Abre el actual
-        const menu = document.getElementById(menuId);
-        if (menu) {
-            menu.classList.toggle('show');
         }
-    }
 
-    // Cerrar menús al hacer clic fuera
-    window.addEventListener('click', function(e) {
-        if (!e.target.closest('.dropdown-wrapper') && !e.target.closest('.btn-mini')) {
-            document.querySelectorAll('.dropdown-content').forEach(el => el.classList.remove('show'));
+        function animate() {
+            if (canvas.style.display === 'none') {
+                requestAnimationFrame(animate);
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const themeColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+            
+            particles.forEach((p, i) => {
+                p.x += p.vX; p.y += p.vY;
+                if (p.x > canvas.width) p.x = 0; if (p.x < 0) p.x = canvas.width;
+                if (p.y > canvas.height) p.y = 0; if (p.y < 0) p.y = canvas.height;
+
+                ctx.fillStyle = themeColor;
+                ctx.globalAlpha = 0.22; // Opacidad intermedia (antes 0.15, original 0.25)
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = p.x - particles[j].x;
+                    const dy = p.y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 140) { // Distancia de conexión intermedia
+                        ctx.strokeStyle = themeColor;
+                        ctx.globalAlpha = (1 - dist / 140) * 0.12; // Brillo de líneas intermedio
+                        ctx.lineWidth = 0.6;
+                        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(particles[j].x, particles[j].y); ctx.stroke();
+                    }
+                }
+            });
+            requestAnimationFrame(animate);
         }
-    });
 
-    // 3. FUNCIONES AUXILIARES
-    window.changeLanguage = function(lang) {
-        const url = new URL(window.location.href);
-        url.searchParams.set('lang', lang);
-        window.location.href = url.toString();
-    }
-
-    window.setSessionTheme = function(hue) {
-        document.documentElement.style.setProperty('--hue', hue);
-        sessionStorage.setItem('temp_theme_color', hue);
-        document.getElementById('colorMenu').classList.remove('show');
+        window.addEventListener('resize', initCanvas);
+        initCanvas(); animate();
     }
 });
 </script>
