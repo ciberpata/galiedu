@@ -70,7 +70,7 @@ try {
         // 4. Preparar el Enlace (Detectar protocolo http o https)
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https://" : "http://";
         $domain = $_SERVER['HTTP_HOST'];
-        // Ajusta la ruta si tu proyecto está en una subcarpeta, ej: /kahoot/index.php
+        // Ajusta la ruta si tu proyecto está en una subcarpeta, ej: /galiedit/index.php
         // Detectamos la ruta base del script actual para construir la URL relativa
         $path = dirname($_SERVER['PHP_SELF']); // /api
         $path = str_replace('/api', '', $path); // Raíz del proyecto

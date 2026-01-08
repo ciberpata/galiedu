@@ -35,14 +35,14 @@ try {
         case 'list': handleList($db, $uid, $role); break;
         case 'get_one': handleGetOne($db, $uid, $role); break;
         case 'create_manual': handleCreateManual($db, $uid, $role, $input); break;
-        case 'update': handleUpdate($db, $uid, $role, $input); break; 
         case 'update_manual': handleUpdate($db, $uid, $role, $input); break;
         case 'duplicate': handleDuplicate($db, $uid, $role, $input); break;
         case 'delete': handleDelete($db, $uid, $role, $input); break;
-        case 'bulk_reassign': handleBulkReassign($db, $uid, $role, $input); break;
+        case 'restore': handleRestore($db, $uid, $role, $input); break;
+        case 'bulk_action': handleBulkAction($db, $uid, $role, $input); break; // Sustituye a bulk_reassign
         case 'validate_import': handleValidateImport(); break;
         case 'execute_import': handleExecuteImport($db, $uid, $role, $input); break;
-        default: throw new Exception('Acción no válida: ' . $action);
+        default: throw new Exception('Acción no válida');
     }
 
 } catch (Exception $e) {
@@ -53,12 +53,13 @@ try {
 
 // --- FUNCIONES PRINCIPALES ---
 
-function handleList($db, $uid, $role) {
+function handleList($db, $uid, $role)
+{
     // Parámetros
     $scope = $_GET['scope'] ?? 'mine';
     $search = $_GET['search'] ?? '';
-    $special = $_GET['special'] ?? ''; 
-    
+    $special = $_GET['special'] ?? '';
+
     // Filtros estándar
     $f_idioma = $_GET['f_idioma'] ?? '';
     $f_tipo = $_GET['f_tipo'] ?? '';
@@ -66,110 +67,113 @@ function handleList($db, $uid, $role) {
     $f_usuario = $_GET['f_usuario'] ?? '';
     $dateFrom = $_GET['date_from'] ?? '';
     $dateTo = $_GET['date_to'] ?? '';
-    
+
     // Ordenación
     $sort = $_GET['sort'] ?? 'id_pregunta';
     $order = $_GET['order'] ?? 'DESC';
     $allowedSorts = ['id_pregunta', 'texto', 'seccion', 'idioma', 'creado_en', 'doble_valor', 'veces_usada'];
-    if(!in_array($sort, $allowedSorts)) $sort = 'id_pregunta';
-    if($order !== 'ASC' && $order !== 'DESC') $order = 'DESC';
+    if (!in_array($sort, $allowedSorts)) $sort = 'id_pregunta';
+    if ($order !== 'ASC' && $order !== 'DESC') $order = 'DESC';
 
-    // Query Base
+    // Query Base - MODIFICADA para Borrado Lógico
     $sql = "SELECT SQL_CALC_FOUND_ROWS p.*, u.nombre as nombre_propietario, pad.nombre as nombre_academia,
             (SELECT COUNT(*) FROM partida_preguntas WHERE id_pregunta = p.id_pregunta) as veces_usada
             FROM preguntas p 
             JOIN usuarios u ON p.id_propietario = u.id_usuario 
-            LEFT JOIN usuarios pad ON u.id_padre = pad.id_usuario 
-            WHERE 1=1";
-    $params = [];
+            LEFT JOIN usuarios pad ON u.id_padre = pad.id_usuario";
 
+    // Lógica de Papelera: Si el filtro especial es 'trash', mostramos lo borrado.
+    if ($special === 'trash') {
+        $sql .= " WHERE p.fecha_eliminacion IS NOT NULL";
+    } else {
+        $sql .= " WHERE p.fecha_eliminacion IS NULL";
+    }
+    $params = [];
     // --- LÓGICA DE VISIBILIDAD (SCOPE) ---
-    
+
     if ($role == 1) {
         // Superadmin ve todo
-    } 
-    elseif ($role == 2) {
-        // ACADEMIA: Ve sus preguntas Y las de sus subordinados (hijos: profesores y editores)
+    } elseif ($role == 2) {
+        // ACADEMIA: Ve sus preguntas Y las de sus subordinados
         $sql .= " AND (p.id_propietario = ? OR u.id_padre = ?)";
         $params[] = $uid;
         $params[] = $uid;
-    } 
-    else {
+    } else {
         // PROFESORES (Rol 3, 4) y EDITORES (Rol 5)
         if ($scope === 'shared_bank' && in_array($role, [3, 4, 5])) {
-            // Verificar si tiene padre (Academia)
             $stmtP = $db->prepare("SELECT id_padre FROM usuarios WHERE id_usuario = ?");
             $stmtP->execute([$uid]);
             $padre = $stmtP->fetchColumn();
-            
+
             if ($padre) {
-                // LOGICA CORREGIDA: Ver preguntas de la Academia (Padre) Y de los Editores (Rol 5) de esa Academia
-                // Excluimos las propias del usuario actual para que no salgan duplicadas o confusas en este filtro
                 $sql .= " AND p.id_propietario != ? AND (
-                            p.id_propietario = ? 
-                            OR p.id_propietario IN (SELECT id_usuario FROM usuarios WHERE id_padre = ? AND id_rol = 5)
-                          )";
-                $params[] = $uid;   // Excluir mis propias preguntas de la vista "Compartidas"
-                $params[] = $padre; // Preguntas de la Academia
-                $params[] = $padre; // Preguntas de los Editores de la Academia
+                                p.id_propietario = ? 
+                                OR p.id_propietario IN (SELECT id_usuario FROM usuarios WHERE id_padre = ? AND id_rol = 5)
+                            )";
+                $params[] = $uid;
+                $params[] = $padre;
+                $params[] = $padre;
             } else {
-                // Rol 4 (Independiente) o Rol 3 sin padre -> No ven nada en banco compartido
-                $sql .= " AND 0"; 
+                $sql .= " AND 0";
             }
         } else {
-            // Defecto (scope='mine'): Ver SOLO mis preguntas
             $sql .= " AND p.id_propietario = ?";
             $params[] = $uid;
         }
     }
 
-    // --- FILTROS ---
+        // --- FILTROS ---
 
-    if ($special === 'orphan') {
-        $sql .= " AND (p.seccion IS NULL OR p.seccion = '')";
-    } elseif (!empty($f_seccion)) { 
-        $sql .= " AND p.seccion LIKE ?"; 
-        $params[] = "%$f_seccion%"; 
-    }
+        if ($special === 'orphan') {
+            $sql .= " AND (p.seccion IS NULL OR p.seccion = '')";
+        } elseif (!empty($f_seccion)) { 
+            $sql .= " AND p.seccion LIKE ?"; 
+            $params[] = "%$f_seccion%"; 
+        }
 
-    if (!empty($search)) { 
-        $sql .= " AND (p.texto LIKE ? OR p.seccion LIKE ?)"; 
-        $term = "%$search%";
-        $params[] = $term; $params[] = $term;
-    }
-    if (!empty($f_idioma)) { $sql .= " AND p.idioma = ?"; $params[] = $f_idioma; }
-    if (!empty($f_tipo)) { $sql .= " AND p.tipo = ?"; $params[] = $f_tipo; }
-    if (!empty($f_usuario)) { $sql .= " AND p.id_propietario = ?"; $params[] = $f_usuario; }
+        if (!empty($search)) { 
+            $sql .= " AND (p.texto LIKE ? OR p.seccion LIKE ?)"; 
+            $term = "%$search%";
+            $params[] = $term; $params[] = $term;
+        }
+        if (!empty($f_idioma)) { $sql .= " AND p.idioma = ?"; $params[] = $f_idioma; }
+        if (!empty($f_tipo)) { $sql .= " AND p.tipo = ?"; $params[] = $f_tipo; }
+        if (!empty($f_usuario)) { $sql .= " AND p.id_propietario = ?"; $params[] = $f_usuario; }
 
-    if (!empty($dateFrom)) { $sql .= " AND p.creado_en >= ?"; $params[] = $dateFrom . " 00:00:00"; }
-    if (!empty($dateTo)) { $sql .= " AND p.creado_en <= ?"; $params[] = $dateTo . " 23:59:59"; }
+        if (!empty($dateFrom)) { $sql .= " AND p.creado_en >= ?"; $params[] = $dateFrom . " 00:00:00"; }
+        if (!empty($dateTo)) { $sql .= " AND p.creado_en <= ?"; $params[] = $dateTo . " 23:59:59"; }
 
-    $page = (int)($_GET['page'] ?? 1);
-    $limit = (int)($_GET['limit'] ?? 10);
-    $offset = ($page - 1) * $limit;
+        $page = (int)($_GET['page'] ?? 1);
+        $limit = (int)($_GET['limit'] ?? 10);
+        $offset = ($page - 1) * $limit;
 
-    $sql .= " ORDER BY $sort $order LIMIT $limit OFFSET $offset";
+        $sql .= " ORDER BY $sort $order LIMIT $limit OFFSET $offset";
 
-    $stmt = $db->prepare($sql);
-    $stmt->execute($params);
-    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    $total = $db->query("SELECT FOUND_ROWS()")->fetchColumn();
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $total = $db->query("SELECT FOUND_ROWS()")->fetchColumn();
 
-    echo json_encode(['data' => $data, 'total' => $total, 'page' => $page, 'limit' => $limit]);
+        echo json_encode(['data' => $data, 'total' => $total, 'page' => $page, 'limit' => $limit]);
 }
 
 function handleGetOne($db, $uid, $role) {
     $id = $_GET['id'] ?? 0;
-    // Lectura laxa para permitir duplicar preguntas compartidas
-    $stmt = $db->prepare("SELECT * FROM preguntas WHERE id_pregunta = ?");
+    // Modificado para no obtener preguntas borradas lógicamente
+    $stmt = $db->prepare("SELECT * FROM preguntas WHERE id_pregunta = ? AND fecha_eliminacion IS NULL");
     $stmt->execute([$id]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
-    if(!$data) throw new Exception("Pregunta no encontrada");
+    if(!$data) throw new Exception("Pregunta no encontrada o eliminada");
     echo json_encode(['data' => $data, 'success'=>true]);
 }
 
-function handleCreateManual($db, $uid, $role, $data) { saveQuestion($db, $uid, $role, $data, null); }
-function handleUpdate($db, $uid, $role, $data) { saveQuestion($db, $uid, $role, $data, $data['id_pregunta']); }
+function handleCreateManual($db, $uid, $role, $data){
+    saveQuestion($db, $uid, $role, $data, null);
+}
+
+function handleUpdate($db, $uid, $role, $data){
+    saveQuestion($db, $uid, $role, $data, $data['id_pregunta']);
+}
 
 function saveQuestion($db, $uid, $role, $data, $idToUpdate = null) {
     // Lógica de asignación: Si es academia, puede asignar a otro. Si es editor, asigna a su padre si existe.
@@ -237,33 +241,38 @@ function handleDuplicate($db, $uid, $role, $input) {
 }
 
 function handleDelete($db, $uid, $role, $data) {
-    $id = $data['id_pregunta'];
+    $id = $data['id_pregunta'] ?? $data['id'];
     if (!checkOwner($db, $id, $uid, $role)) throw new Exception("No autorizado");
-    $db->prepare("DELETE FROM preguntas WHERE id_pregunta = ?")->execute([$id]);
-    echo json_encode(['success' => true]);
+    $db->prepare("UPDATE preguntas SET fecha_eliminacion = NOW() WHERE id_pregunta = ?")->execute([$id]);
+    Logger::registrar($db, $uid, 'SOFT_DELETE', 'preguntas', $id);
+    echo json_encode(['success' => true, 'mensaje' => 'Pregunta movida a la papelera']);
 }
 
-function handleBulkReassign($db, $uid, $role, $data) {
-    if ($role != 1 && $role != 2) throw new Exception("Solo Admin o Academia pueden reasignar.");
-    $new_owner_id = $data['new_owner_id'];
-    $question_ids = $data['question_ids'] ?? [];
-    if (empty($question_ids)) throw new Exception("No seleccionaste preguntas.");
-    $in  = str_repeat('?,', count($question_ids) - 1) . '?';
-    
-    if ($role == 2) {
-        $stmtCheck = $db->prepare("SELECT id_padre FROM usuarios WHERE id_usuario = ?");
-        $stmtCheck->execute([$new_owner_id]);
-        if ($stmtCheck->fetchColumn() != $uid) throw new Exception("El usuario destino no es de tu academia.");
-        
-        $sql = "UPDATE preguntas SET id_propietario = ? WHERE id_pregunta IN ($in) AND id_propietario IN (SELECT id_usuario FROM usuarios WHERE id_usuario = ? OR id_padre = ?)";
-        $params = array_merge([$new_owner_id], $question_ids, [$uid, $uid]);
-    } else {
+function handleRestore($db, $uid, $role, $data) {
+    $id = $data['id_pregunta'] ?? $data['id'];
+    if (!checkOwner($db, $id, $uid, $role)) throw new Exception("No autorizado");
+    $db->prepare("UPDATE preguntas SET fecha_eliminacion = NULL WHERE id_pregunta = ?")->execute([$id]);
+    Logger::registrar($db, $uid, 'RESTORE', 'preguntas', $id);
+    echo json_encode(['success' => true, 'mensaje' => 'Pregunta restaurada']);
+}
+
+function handleBulkAction($db, $uid, $role, $data) {
+    $ids = $data['ids'] ?? $data['question_ids'] ?? [];
+    $type = $data['type'] ?? ''; 
+    if (empty($ids)) throw new Exception("No hay elementos seleccionados");
+    $in = str_repeat('?,', count($ids) - 1) . '?';
+    $params = $ids;
+    if ($type === 'delete') {
+        $sql = "UPDATE preguntas SET fecha_eliminacion = NOW() WHERE id_pregunta IN ($in)";
+    } elseif ($type === 'restore') {
+        $sql = "UPDATE preguntas SET fecha_eliminacion = NULL WHERE id_pregunta IN ($in)";
+    } elseif ($type === 'reassign') {
+        $target = $data['target'] ?? $data['new_owner_id'];
         $sql = "UPDATE preguntas SET id_propietario = ? WHERE id_pregunta IN ($in)";
-        $params = array_merge([$new_owner_id], $question_ids);
+        array_unshift($params, $target);
     }
-    $stmt = $db->prepare($sql);
-    $stmt->execute($params);
-    echo json_encode(["success" => true, "message" => $stmt->rowCount() . " preguntas reasignadas."]);
+    $db->prepare($sql)->execute($params);
+    echo json_encode(["success" => true]);
 }
 
 function checkOwner($db, $idPregunta, $uid, $role) {
@@ -428,21 +437,21 @@ function handleExecuteImport($db, $uid, $role, $postData) {
     echo json_encode(['status'=>'ok', 'insertadas'=>$inserted, 'saltados'=>$skipped, 'mensaje'=>"$inserted preguntas importadas."]);
 }
 
-function getCsvMap($header) {
-    $map = [];
-    foreach ($header as $i => $col) {
-        $k = strtolower(trim(preg_replace('/[\x00-\x1F\x7F]/u', '', $col)));
-        if (strpos($k, 'texto') !== false || strpos($k, 'pregunta') !== false) $map['texto'] = $i;
-        if (strpos($k, 'seccion') !== false) $map['seccion'] = $i;
-        if (strpos($k, 'opcion_a') !== false || $k=='a') $map['a'] = $i;
-        if (strpos($k, 'opcion_b') !== false || $k=='b') $map['b'] = $i;
-        if (strpos($k, 'opcion_c') !== false || $k=='c') $map['c'] = $i;
-        if (strpos($k, 'opcion_d') !== false || $k=='d') $map['d'] = $i;
-        if (strpos($k, 'correcta') !== false) $map['correcta'] = $i;
-        if (strpos($k, 'tiempo') !== false) $map['tiempo'] = $i;
-        if (strpos($k, 'idioma') !== false) $map['idioma'] = $i;
-        if (strpos($k, 'doble') !== false) $map['doble'] = $i;
+    function getCsvMap($header) {
+        $map = [];
+        foreach ($header as $i => $col) {
+            $k = strtolower(trim(preg_replace('/[\x00-\x1F\x7F]/u', '', $col)));
+            if (strpos($k, 'texto') !== false || strpos($k, 'pregunta') !== false) $map['texto'] = $i;
+            if (strpos($k, 'seccion') !== false) $map['seccion'] = $i;
+            if (strpos($k, 'opcion_a') !== false || $k=='a') $map['a'] = $i;
+            if (strpos($k, 'opcion_b') !== false || $k=='b') $map['b'] = $i;
+            if (strpos($k, 'opcion_c') !== false || $k=='c') $map['c'] = $i;
+            if (strpos($k, 'opcion_d') !== false || $k=='d') $map['d'] = $i;
+            if (strpos($k, 'correcta') !== false) $map['correcta'] = $i;
+            if (strpos($k, 'tiempo') !== false) $map['tiempo'] = $i;
+            if (strpos($k, 'idioma') !== false) $map['idioma'] = $i;
+            if (strpos($k, 'doble') !== false) $map['doble'] = $i;
+        }
+        return $map;
     }
-    return $map;
-}
 ?>
