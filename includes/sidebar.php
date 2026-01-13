@@ -69,17 +69,17 @@ function isActive($viewName) {
         </a>
         <?php endif; ?>
 
-        <a href="partidas" class="nav-item <?php echo isActive('partidas'); ?>">
-            <i class="fa-solid fa-play"></i> 
-            <?php echo ($role == 6) ? 'Mi Historial' : __('game_management'); ?>
-        </a>
-
         <?php if ($role != 6): // No alumnos ?>
         <a href="preguntas" class="nav-item <?php echo isActive('preguntas'); ?>">
             <i class="fa-solid fa-circle-question"></i> 
             <?php echo __('question_management'); ?>
         </a>
         <?php endif; ?>
+
+        <a href="partidas" class="nav-item <?php echo isActive('partidas'); ?>">
+            <i class="fa-solid fa-play"></i> 
+            <?php echo ($role == 6) ? 'Mi Historial' : __('game_management'); ?>
+        </a>
         
         <?php if ($role != 6): // No mostrar a alumnos ?>
         <a href="auditoria" class="nav-item <?php echo isActive('auditoria'); ?>">
