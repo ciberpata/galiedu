@@ -156,14 +156,16 @@ $isAcademy = ($role == 2);
     <div class="dashboard-header" style="margin-bottom: 1rem;">
         <h2 class="welcome-title"><i class="fa-solid fa-users"></i> <?php echo __('key_users_title'); ?></h2>
         <div class="header-actions">
-            <button class="btn-icon" title="<?php echo __('btn_export_pdf'); ?>" onclick="exportUsersPDF()">
-                <i class="fa-solid fa-file-pdf text-danger" style="font-size: 1.2rem;"></i>
+            <button class="btn-icon" onclick="window.open('api/export_pdf.php?type=usuarios', '_blank')" title="<?php echo __('btn_export_pdf'); ?>">
+                <i class="fa-solid fa-file-pdf text-danger"></i>
             </button>
-            <button class="btn-primary" onclick="showSection('list')" title="<?php echo __('key_btn_list_title'); ?>">
-                <i class="fa-solid fa-list"></i> <span><?php echo __('key_btn_list'); ?></span>
+
+            <button id="btn-nav-list" onclick="showSection('list')" title="<?php echo __('key_btn_list_title'); ?>" style="padding:0.6rem 1.2rem; border-radius:var(--radius); display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:var(--primary); color:white; border:none;">
+                <i class="fa-solid fa-list"></i> <span class="mobile-hidden"><?php echo __('key_btn_list'); ?></span>
             </button>
-            <button class="btn-icon" style="border:1px solid var(--border-color); border-radius: var(--radius); width: auto; padding: 0.6rem 1.2rem;" onclick="prepareCreateUser()" title="<?php echo __('key_btn_new_import_title'); ?>">
-                <i class="fa-solid fa-plus"></i> <span><?php echo __('key_btn_new_import'); ?></span>
+
+            <button id="btn-nav-create" onclick="prepareCreateUser()" title="<?php echo __('key_btn_new_import_title'); ?>" style="padding:0.6rem 1.2rem; border-radius:var(--radius); display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:none; color:var(--text-main); border:1px solid var(--border-color);">
+                <i class="fa-solid fa-plus"></i> <span class="mobile-hidden"><?php echo __('key_btn_new_import'); ?></span>
             </button>
         </div>
     </div>
@@ -177,11 +179,13 @@ $isAcademy = ($role == 2);
                 <button class="btn-quick-filter" title="<?php echo __('qf_title_risk_students'); ?>" onclick="applyUserFilter('risk_students', this)"><?php echo __('qf_risk_students'); ?></button>
                 <button class="btn-quick-filter" title="<?php echo __('qf_title_top_creators'); ?>" onclick="applyUserFilter('top_creators', this)"><?php echo __('qf_top_creators'); ?></button>
                 <?php if ($isSuperAdmin): ?>
-                    <button class="btn-quick-filter" title="<?php echo __('qf_title_blocked_users'); ?>" onclick="applyUserFilter('blocked_users', this)"><?php echo __('qf_blocked_users'); ?></button>
                     <button class="btn-quick-filter" title="<?php echo __('qf_title_new_academies'); ?>" onclick="applyUserFilter('new_academies', this)"><?php echo __('qf_new_academies'); ?></button>
                     <button class="btn-quick-filter" title="<?php echo __('qf_title_ghost_users'); ?>" onclick="applyUserFilter('ghost_users', this)"><?php echo __('qf_ghost_users'); ?></button>
                 <?php endif; ?>
-                <button class="btn-quick-filter" onclick="resetUserFilters(this)" title="<?php echo __('qf_title_reset'); ?>"><i class="fa-solid fa-xmark"></i></button>
+                <button class="btn-quick-filter text-danger" title="Ver Papelera" onclick="applyUserFilter('trash', this)">
+                    <i class="fa-solid fa-trash-can"></i> <?php echo __('key_users_trash_title', 'Papelera'); ?>
+                </button>
+    <button class="btn-quick-filter" onclick="resetUserFilters(this)" title="<?php echo __('qf_title_reset'); ?>"><i class="fa-solid fa-xmark"></i></button>
             </div>
         <?php endif; ?>
 
@@ -310,8 +314,8 @@ $isAcademy = ($role == 2);
                     <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .ods" hidden>
                 </div>
                 <div class="mt-4 text-right">
-                    <a href="api/usuarios.php?action=download_template" target="_blank" class="btn-icon" style="border:1px solid var(--border-color); width:auto; padding:0.5rem 1rem; border-radius:4px; text-decoration:none;">
-                        <i class="fa-solid fa-download"></i> <?php echo __('key_import_download_template'); ?>
+                    <a href="api/preguntas.php?action=download_template" target="_blank" class="btn-icon" style="border:1px solid var(--border-color); border-radius:4px; padding:0.5rem 1rem; text-decoration:none; display: inline-flex; align-items: center; gap: 8px; width: auto; min-width: 210px; justify-content: center;">
+                        <i class="fa-solid fa-file-csv"></i> <span><?php echo __('key_import_download_template'); ?></span>
                     </a>
                 </div>
             </div>
@@ -435,11 +439,13 @@ $isAcademy = ($role == 2);
             window.currentUserFilter = 'risk_students';
             userState.sortCol = 'promedio_puntos';
             userState.sortOrder = 'ASC';
+        } else if (type === 'trash') {
+            window.currentUserFilter = 'trash'; // Activa el filtro de borrados lógicos
         } else if (type === 'active_teachers') {
             window.currentUserFilter = 'active_teachers';
             document.getElementById('f_estado').value = '1';
-        } else if (type === 'blocked_users') {
-            document.getElementById('f_estado').value = '0';
+        } else if (type === 'trash') {
+            window.currentUserFilter = 'trash';
         } else if (type === 'new_academies') {
             document.getElementById('f_rol').value = '2';
             const today = new Date();
@@ -564,10 +570,16 @@ $isAcademy = ($role == 2);
                 <td>${u.nif || '-'}<br><small class="text-muted">${u.razon_social || ''}</small></td>
                 <td>${u.activo==1?'<span class="text-success font-bold"><?php echo __("key_users_status_active"); ?></span>':'<span class="text-danger font-bold"><?php echo __("key_users_status_blocked"); ?></span>'}</td>
                 <td class="text-right">
-                    <button onclick="toggleUserStatus(${u.id_usuario}, ${u.activo})" class="btn-icon" title="${toggleTitle}">${statusIcon}</button>
-                    <button onclick="editUser(${u.id_usuario})" class="btn-icon" title="<?php echo __("key_js_edit_title"); ?>"><i class="fa-solid fa-pen"></i></button>
-                    <button onclick="changePass(${u.id_usuario})" class="btn-icon text-warning" title="<?php echo __("key_users_pass_title"); ?>"><i class="fa-solid fa-key"></i></button>
-                    <button onclick="deleteUser(${u.id_usuario})" class="btn-icon text-danger" title="<?php echo __("key_js_delete_title"); ?>"><i class="fa-solid fa-trash"></i></button>
+                    ${window.currentUserFilter === 'trash' ? `
+                        <button onclick="restoreUser(${u.id_usuario})" class="btn-icon text-success" title="Restaurar Usuario">
+                            <i class="fa-solid fa-trash-can-arrow-up"></i>
+                        </button>
+                    ` : `
+                        <button onclick="toggleUserStatus(${u.id_usuario}, ${u.activo})" class="btn-icon" title="${toggleTitle}">${statusIcon}</button>
+                        <button onclick="editUser(${u.id_usuario})" class="btn-icon" title="<?php echo __("key_js_edit_title"); ?>"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="changePass(${u.id_usuario})" class="btn-icon text-warning" title="<?php echo __("key_users_pass_title"); ?>"><i class="fa-solid fa-key"></i></button>
+                        <button onclick="deleteUser(${u.id_usuario})" class="btn-icon text-danger" title="<?php echo __("key_js_delete_title"); ?>"><i class="fa-solid fa-trash"></i></button>
+                    `}
                 </td>
             </tr>`;
         });
@@ -628,10 +640,29 @@ $isAcademy = ($role == 2);
     }
 
     function showSection(sec) {
-        document.getElementById('sec-list').classList.add('hidden');
-        document.getElementById('sec-create').classList.add('hidden');
-        document.getElementById('sec-' + sec).classList.remove('hidden');
-        if (sec === 'list') loadAdminUsers();
+        // 1. Alternar visibilidad de las secciones
+        const listSec = document.getElementById('sec-list');
+        const createSec = document.getElementById('sec-create');
+        if(listSec) listSec.classList.toggle('hidden', sec !== 'list');
+        if(createSec) createSec.classList.toggle('hidden', sec !== 'create');
+
+        // 2. Referencia a botones de navegación
+        const btnList = document.getElementById('btn-nav-list');
+        const btnCreate = document.getElementById('btn-nav-create');
+        if(!btnList || !btnCreate) return;
+        
+        // 3. Estilos base (MANTIENEN LA FORMA)
+        const base = "padding:0.6rem 1.2rem; border-radius:var(--radius); display:inline-flex; align-items:center; gap:8px; cursor:pointer;";
+        const active = "background:var(--primary); color:white; border:none;";
+        const inactive = "background:none; color:var(--text-main); border:1px solid var(--border-color);";
+
+        if (sec === 'list') {
+            btnList.style.cssText = base + active;
+            btnCreate.style.cssText = base + inactive;
+        } else {
+            btnList.style.cssText = base + inactive;
+            btnCreate.style.cssText = base + active;
+        }
     }
 
     function prepareCreateUser() {
@@ -975,5 +1006,22 @@ $isAcademy = ($role == 2);
         container.classList.remove('hidden');
         document.querySelectorAll('.step-item').forEach(s => s.classList.remove('active'));
         document.getElementById('st-2').classList.add('active');
+    }
+
+    async function restoreUser(id) {
+        if(!confirm("¿Deseas restaurar a este usuario y volver a activarlo?")) return;
+        try {
+            const res = await fetch('api/usuarios.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'restore', id_usuario: id })
+            });
+            const json = await res.json();
+            if (json.success) {
+                // Tras restaurar, volvemos a la lista normal
+                window.currentUserFilter = ''; 
+                loadAdminUsers();
+            } else alert(json.error);
+        } catch (e) { alert("Error de conexión"); }
     }
 </script>

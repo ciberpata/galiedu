@@ -36,15 +36,15 @@ $isTeacher = ($role == 3 || $role == 4);
         <h2 class="welcome-title"><i class="fa-solid fa-circle-question"></i> <?php echo __('key_questions_title'); ?></h2>
 
         <div class="header-actions">
-            <button class="btn-icon" onclick="window.open('api/export_pdf.php?type=preguntas', '_blank')" title="<?php echo __('btn_export_pdf'); ?>">
-                <i class="fa-solid fa-file-pdf text-danger"></i>
-            </button>
-
-            <button class="btn-primary" onclick="showSection('list')" title="<?php echo __('key_btn_list_title'); ?>">
+            <button id="btn-nav-list" class="btn-primary" onclick="showSection('list')" title="<?php echo __('key_btn_list_title'); ?>" style="padding:0.6rem 1.2rem; border-radius:var(--radius);">
                 <i class="fa-solid fa-list"></i> <span class="mobile-hidden"><?php echo __('key_btn_list'); ?></span>
             </button>
 
-            <button class="btn-icon" style="border:1px solid var(--border-color); border-radius:var(--radius); width:auto; padding:0.6rem 1.2rem;" onclick="prepareCreate()" title="<?php echo __('key_btn_new_import_title'); ?>">
+            <button id="btn-nav-create" class="btn-icon" onclick="prepareCreate()" title="<?php echo __('key_btn_new_import_title'); ?>" style="border:1px solid var(--border-color); border-radius:var(--radius); width:auto; padding:0.6rem 1.2rem;">
+                <i class="fa-solid fa-plus"></i> <span class="mobile-hidden"><?php echo __('key_btn_new_import'); ?></span>
+            </button>
+
+            <button id="btn-nav-create" class="btn-icon" style="border:1px solid var(--border-color); border-radius:var(--radius); width:auto; padding:0.6rem 1.2rem;" onclick="prepareCreate()" title="<?php echo __('key_btn_new_import_title'); ?>">
                 <i class="fa-solid fa-plus"></i> <span class="mobile-hidden"><?php echo __('key_btn_new_import'); ?></span>
             </button>
         </div>
@@ -359,8 +359,8 @@ $isTeacher = ($role == 3 || $role == 4);
 
                 <div class="mt-4" style="display: flex; justify-content: space-between; align-items: center;">
                     <span class="text-muted" style="font-size: 0.85rem;"><i class="fa-solid fa-info-circle"></i> Formatos soportados: .csv, .xlsx, .xls, .ods</span>
-                    <a href="api/preguntas.php?action=download_template" target="_blank" class="btn-icon" style="border:1px solid var(--border-color); border-radius:4px; padding:0.5rem 1rem; text-decoration:none;">
-                        <i class="fa-solid fa-download"></i> <?php echo __('key_import_download_template'); ?>
+                    <a href="api/preguntas.php?action=download_template" target="_blank" class="btn-icon" style="border:1px solid var(--border-color); border-radius:4px; padding:0.5rem 1rem; text-decoration:none; display: inline-flex; align-items: center; gap: 8px; width: auto; min-width: 200px; justify-content: center;">
+                        <i class="fa-solid fa-file-csv"></i> <span><?php echo __('key_import_download_template'); ?></span>
                     </a>
                 </div>
             </div>
@@ -498,6 +498,23 @@ const LANG_CONFIRM_DELETE = <?php echo json_encode(__('game_js_confirm_delete'))
                     showToast(json.error || "Error al guardar", "error");
                 }
             });
+
+            // --- ACCESO DIRECTO: TECLA ESC ---
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const reassignModal = document.getElementById('reassignModal');
+                    const secCreate = document.getElementById('sec-create');
+
+                    // 1. Si el modal de reasignación está abierto, lo cerramos
+                    if (reassignModal && reassignModal.classList.contains('active')) {
+                        reassignModal.classList.remove('active');
+                    } 
+                    // 2. Si estamos en la pantalla de crear/editar pregunta, cancelamos
+                    else if (secCreate && !secCreate.classList.contains('hidden')) {
+                        cancelEdit();
+                    }
+                }
+            });
         }
 
         const dropZone = document.getElementById('dropZone');
@@ -535,6 +552,21 @@ const LANG_CONFIRM_DELETE = <?php echo json_encode(__('game_js_confirm_delete'))
         document.getElementById('sec-list').classList.add('hidden');
         document.getElementById('sec-create').classList.add('hidden');
         document.getElementById('sec-' + sec).classList.remove('hidden');
+
+        const btnList = document.getElementById('btn-nav-list');
+        const btnCreate = document.getElementById('btn-nav-create');
+        
+        if (sec === 'list') {
+            btnList.className = 'btn-primary';
+            btnList.style.border = 'none';
+            btnCreate.className = 'btn-icon';
+            btnCreate.style.border = '1px solid var(--border-color)';
+        } else {
+            btnList.className = 'btn-icon';
+            btnList.style.border = '1px solid var(--border-color)';
+            btnCreate.className = 'btn-primary';
+            btnCreate.style.border = 'none';
+        }
     }
 
     function openSubTab(name, btn) {
@@ -836,16 +868,32 @@ const LANG_CONFIRM_DELETE = <?php echo json_encode(__('game_js_confirm_delete'))
 
         try {
             showToast("Importando preguntas...", "info");
+            const btnImport = document.querySelector('#import-mapping-step .btn-primary');
+            if(btnImport) btnImport.disabled = true; // Bloqueamos para evitar doble click
+
             const res = await fetch('api/preguntas.php', { method: 'POST', body: fd });
-            const json = await res.json();
+            const text = await res.text();
+            
+            let json;
+            try {
+                json = JSON.parse(text);
+            } catch (e) {
+                // Si ya ha funcionado la importación (status ok), ignoramos errores de parseo posteriores
+                if (text.includes('"status":"ok"')) return; 
+                throw new Error("Respuesta inválida");
+            }
+
             if (json.status === 'ok') {
-                showToast(json.mensaje);
+                showToast(json.mensaje, "success");
                 setTimeout(() => location.reload(), 1500);
+                return; // Finalizamos ejecución aquí
             } else {
-                showToast(json.mensaje, "error");
+                showToast(json.mensaje || "Error", "error");
+                if(btnImport) btnImport.disabled = false;
             }
         } catch (e) {
-            showToast("Error en la importación", "error");
+            console.error(e);
+            showToast("Error en el servidor", "error");
         }
     }
 

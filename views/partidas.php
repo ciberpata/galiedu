@@ -352,13 +352,38 @@ function createCardElement(q, type) {
     
     return div;
 }
+
 function moveCard(id, fromType) {
     const q = allQuestions.find(x => x.id_pregunta == id);
     if(!q) return;
-    if(fromType === 'source') { selectedIds.add(String(id)); document.getElementById('targetList').appendChild(createCardElement(q, 'target')); } 
-    else { selectedIds.delete(String(id)); const item = document.querySelector(`#targetList [data-id="${id}"]`); if(item) item.remove(); }
-    renderSourceList(); updateCount();
+
+    if(fromType === 'source') { 
+        selectedIds.add(String(id)); 
+        const targetList = document.getElementById('targetList');
+        // Buscamos si el elemento ya fue movido físicamente por allowDrop
+        const existing = targetList.querySelector(`[data-id="${id}"]`);
+        
+        // Creamos el elemento con el formato correcto de destino (icono X)
+        const newEl = createCardElement(q, 'target');
+        
+        if (existing) {
+            // Si ya existe, lo reemplazamos para actualizar iconos/eventos 
+            // manteniendo la posición donde el usuario lo soltó
+            existing.replaceWith(newEl);
+        } else {
+            // Si no existe (clic en el botón +), lo añadimos al final
+            targetList.appendChild(newEl);
+        }
+    } 
+    else { 
+        selectedIds.delete(String(id)); 
+        const item = document.querySelector(`#targetList [data-id="${id}"]`); 
+        if(item) item.remove(); 
+    }
+    renderSourceList(); 
+    updateCount();
 }
+
 function allowDrop(ev) { 
     ev.preventDefault(); 
     const container = ev.target.closest('.builder-list');
@@ -382,10 +407,11 @@ function drop(ev, zone) {
     if(!id) return;
     
     if (zone === 'target') {
+        // Solo llamamos a moveCard si la pregunta no estaba ya seleccionada
         if (!selectedIds.has(String(id))) {
             moveCard(id, 'source');
         }
-        // El reordenamiento visual ya se gestionó en allowDrop
+        // El orden visual ya lo gestiona allowDrop mediante insertBefore
     } else if (zone === 'source' && selectedIds.has(String(id))) {
         moveCard(id, 'target');
     }

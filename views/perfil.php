@@ -4,6 +4,10 @@ $db = (new Database())->getConnection();
 $uid = $_SESSION['user_id'];
 $urole = $_SESSION['user_role'];
 
+// DEFINICIONES GLOBALES PARA EVITAR WARNINGS EN EL LOG
+$humanAvatars = [1=>'👨', 2=>'👩', 3=>'👧', 4=>'👦', 5=>'👴', 6=>'👵', 7=>'🤴', 8=>'👸', 9=>'🧔', 10=>'👳', 11=>'👱', 12=>'👰', 13=>'👲', 14=>'👽', 15=>'🤖'];
+$hats = [0 => '', 1 => '🎓', 2 => '👑', 3 => '🎧'];
+
 $sql = "SELECT u.*, df.razon_social, df.nombre_negocio, df.nif, df.roi, df.telefono, df.direccion, df.direccion_numero, df.cp, df.id_pais, df.id_provincia, df.id_ciudad FROM usuarios u LEFT JOIN datos_fiscales df ON u.id_usuario = df.id_usuario WHERE u.id_usuario = ?";
 $stmt = $db->prepare($sql);
 $stmt->execute([$uid]);
@@ -19,24 +23,27 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
             <button class="tab-btn" onclick="openTab('game-profile', this)">🎮 Perfil de Juego</button>
         <?php endif; ?>
         <button class="tab-btn" onclick="openTab('appearance', this)"><?php echo __('appearance'); ?></button>
+        <?php if ($urole == 1 || $urole == 2 || $urole == 4): ?>
+            <button class="tab-btn" onclick="openTab('white-label', this)">Marca Blanca</button>
+        <?php endif; ?>
         <button class="tab-btn" onclick="openTab('change-pass', this)"><?php echo __('security'); ?></button>
     </div>
 
     <div id="edit-profile" class="tab-content active">
         <form id="profileForm" enctype="multipart/form-data">
             <input type="hidden" name="action" value="update_profile">
-            <div class="profile-layout">
+            <div class="<?php echo $urole == 6 ? '' : 'profile-layout'; ?>">
+                <?php if ($urole != 6): ?>
                 <div class="avatar-section">
                     <img id="avatar-preview" class="avatar-img" src="<?php echo !empty($user['foto_perfil']) ? $user['foto_perfil'] . '?t=' . time() : 'assets/img/default-avatar.png'; ?>">
-                    <?php if ($urole != 6): ?>
-                        <div style="width: 100%;">
-                            <label for="avatar_file" class="btn-primary" style="width:100%; cursor:pointer;">
-                                <i class="fa-solid fa-camera"></i> <?php echo __('change_photo'); ?>
-                            </label>
-                            <input type="file" id="avatar_file" name="foto_perfil" accept="image/*" style="display:none;" onchange="previewImage(event)">
-                        </div>
-                    <?php endif; ?>
+                    <div style="width: 100%;">
+                        <label for="avatar_file" class="btn-primary" style="width:100%; cursor:pointer;">
+                            <i class="fa-solid fa-camera"></i> <?php echo __('change_photo'); ?>
+                        </label>
+                        <input type="file" id="avatar_file" name="foto_perfil" accept="image/*" style="display:none;" onchange="previewImage(event)">
+                    </div>
                 </div>
+                <?php endif; ?>
 
                 <div>
                     <h3 class="modal-section-title"><?php echo __('personal_data'); ?></h3>
@@ -93,9 +100,15 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
                                 </select></div>
                             <div class="mb-4"><label class="block text-muted mb-2"><?php echo __('city_label'); ?> *</label><select name="id_ciudad" id="selectCiudad" class="form-control"></select></div>
                         </div>
-                        <div class="text-right mt-4"><button type="submit" class="btn-primary"><?php echo __('save_changes'); ?></button></div>
+                        <div class="text-right mt-4" style="display: flex; justify-content: flex-end; gap: 10px;">
+                            <button type="button" class="btn-icon" onclick="resetBrandingColors()" title="Volver a colores originales">
+                                <i class="fa-solid fa-arrow-rotate-left"></i> Restablecer Colores
+                            </button>
+                            <button type="submit" class="btn-primary">Guardar Marca Blanca</button>
+                        </div>
                     <?php else: ?>
-                        <div class="text-right mt-4"><button type="submit" class="btn-primary">Guardar Idioma</button></div>
+                        
+                <div class="text-right mt-4"><button type="submit" class="btn-primary">Guardar Perfil de Juego</button></div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -103,34 +116,54 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     </div>
 
     <?php if ($urole == 6): ?>
-        <div id="game-profile" class="tab-content hidden">
-            <form id="gameProfileForm">
-                <input type="hidden" name="action" value="update_profile">
-                <h3 class="modal-section-title">Ajustes de Jugador</h3>
-                <p class="text-muted mb-4">Personaliza tu identidad para las partidas.</p>
+    <div id="game-profile" class="tab-content hidden">
+        <form id="gameProfileForm" onsubmit="handleSave(event)">
+            <input type="hidden" name="action" value="update_profile">
+            <h3 class="modal-section-title">Identidad en el Juego</h3>
 
-                <div class="mb-4">
-                    <label class="block text-muted mb-2">Apodo (Nick)</label>
-                    <input type="text" name="nick" class="form-control" value="<?php echo htmlspecialchars($user['nick'] ?? ''); ?>" placeholder="Ej: ElMáquina" maxlength="15">
+            <div class="avatar-preview-box" style="border: 2px dashed var(--border-color); border-radius: 15px; padding: 20px; text-align: center; margin-bottom: 20px; background: var(--bg-body); min-height: 180px; display: flex; justify-content: center; align-items: center;">
+                <div class="preview-emoji-container">
+                    <span id="pAvatar" class="avatar-emoji"><?php echo $humanAvatars[$user['avatar_id'] ?? 1]; ?></span>
+                    <span id="pHat" class="avatar-hat">
+                        <?php echo $hats[$user['sombrero_id'] ?? 0]; ?>
+                    </span>
                 </div>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-muted mb-2">Tu Apodo (Nick)</label>
+                <input type="text" name="nick" class="form-control" value="<?php echo htmlspecialchars($user['nick'] ?? ''); ?>" maxlength="15">
+            </div>
 
-                <label class="block text-muted mb-2">Avatar</label>
-                <div class="avatar-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 10px; max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px;">
-                    <?php
-                    $avatars = ['🛡️', '⚔️', '🗡️', '🏛️', '🏹', '🔮', '🥷', '🏴‍☠️', '🌿', '⚜️', '🤖', '👽', '🦊', '🦁', '🦄'];
-                    foreach ($avatars as $idx => $emoji):
-                        $id = $idx + 1;
-                        $selected = (isset($user['avatar_id']) && $user['avatar_id'] == $id);
-                    ?>
-                        <label style="cursor:pointer; text-align:center; padding:10px; border-radius:8px; border: 2px solid <?php echo $selected ? 'var(--primary-color)' : 'transparent'; ?>; background: <?php echo $selected ? 'var(--bg-body)' : 'none'; ?>;">
-                            <input type="radio" name="avatar_id" value="<?php echo $id; ?>" <?php echo $selected ? 'checked' : ''; ?> style="display:none;" onchange="this.form.dispatchEvent(new Event('submit'))">
-                            <span style="font-size: 2rem;"><?php echo $emoji; ?></span>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
-                <div class="text-right mt-4"><button type="submit" class="btn-primary">Guardar Perfil de Juego</button></div>
-            </form>
-        </div>
+            <label class="block text-muted mb-2">1. Selecciona tu Avatar</label>
+            <div class="avatar-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 10px; max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px;">
+                <?php foreach ($humanAvatars as $id => $emoji): $selected = (($user['avatar_id'] ?? 1) == $id); ?>
+                    <label style="cursor:pointer; text-align:center; padding:10px; border-radius:8px; border: 2px solid <?php echo $selected ? 'var(--primary)' : 'transparent'; ?>; background: <?php echo $selected ? 'var(--primary-light)' : 'none'; ?>;">
+                        <input type="radio" name="avatar_id" value="<?php echo $id; ?>" <?php echo $selected ? 'checked' : ''; ?> style="display:none;" onchange="updateProfilePreview('avatar', '<?php echo $emoji; ?>')">
+                        <span style="font-size: 2rem;"><?php echo $emoji; ?></span>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+
+            <label class="block text-muted mb-2 mt-4">2. Añade un Sombrero</label>
+            <div class="hat-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 10px; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px;">
+                <?php
+                $hatEmojis = [0 => '❌', 1 => '🎓', 2 => '👑', 3 => '🎧'];
+                foreach ($hatEmojis as $hId => $hEmoji):
+                    $hSelected = (($user['sombrero_id'] ?? 0) == $hId);
+                ?>
+                    <label style="cursor:pointer; text-align:center; padding:10px; border-radius:8px; border: 2px solid <?php echo $hSelected ? 'var(--primary)' : 'transparent'; ?>; background: <?php echo $hSelected ? 'var(--primary-light)' : 'none'; ?>;">
+                        <input type="radio" name="sombrero_id" value="<?php echo $hId; ?>" <?php echo $hSelected ? 'checked' : ''; ?> style="display:none;" onchange="updateProfilePreview('hat', '<?php echo ($hId==0?'':$hEmoji); ?>', <?php echo $hId; ?>)">
+                        <span style="font-size: 1.8rem;"><?php echo $hEmoji; ?></span>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="text-right mt-4">
+                <button type="submit" class="btn-primary">Guardar Perfil de Juego</button>
+            </div>
+        </form>
+    </div>
     <?php endif; ?>
 
     <div id="appearance" class="tab-content hidden">
@@ -154,6 +187,51 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
             <div class="text-right mt-4"><button type="submit" class="btn-primary"><?php echo __('save_appearance'); ?></button></div>
         </form>
     </div>
+
+    <?php if ($urole == 1 || $urole == 2 || $urole == 4): ?>
+    <div id="white-label" class="tab-content hidden">
+        <form id="brandingForm" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="save_branding">
+            <h3 class="modal-section-title">Identidad Corporativa</h3>
+            <p class="text-muted mb-4">Personaliza los colores y el logo de tu academia para el proyector y reportes.</p>
+
+            <div class="modal-form-grid">
+                <div class="mb-4">
+                    <label class="block text-muted mb-2">Color Primario</label>
+                    <input type="color" name="mb_color_primario" class="form-control" style="height:45px; padding:5px;" value="<?php echo $user['mb_color_primario'] ?? '#6366f1'; ?>">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-muted mb-2">Color de Contraste</label>
+                    <input type="color" name="mb_color_secundario" class="form-control" style="height:45px; padding:5px;" value="<?php echo $user['mb_color_secundario'] ?? '#4f46e5'; ?>">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-muted mb-2">Logo de la Academia</label>
+                <input type="file" name="mb_logo_marca" class="form-control" accept="image/*">
+                <small class="text-muted">Se recomienda formato PNG transparente o WebP.</small>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-muted mb-2">Imagen de Fondo Proyector</label>
+                <input type="file" name="mb_bg_proyector" class="form-control" accept="image/*">
+                <small class="text-muted">Resolución recomendada: 1920x1080px.</small>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-muted mb-2">Mensaje de Bienvenida (Lobby)</label>
+                <input type="text" name="mb_txt_bienvenida" class="form-control" value="<?php echo htmlspecialchars($user['mb_txt_bienvenida'] ?? '¡Bienvenidos!'); ?>" maxlength="100">
+            </div>
+
+            <div class="text-right mt-4" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn-icon" onclick="resetBrandingColors()" title="Restablecer colores originales">
+                    <i class="fa-solid fa-arrow-rotate-left"></i> Restablecer
+                </button>
+                <button type="submit" class="btn-primary">Guardar Marca Blanca</button>
+            </div>
+        </form>
+    </div>
+    <?php endif; ?>
 
     <div id="change-pass" class="tab-content hidden">
         <form id="passForm">
@@ -214,32 +292,38 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
         }
     }
     const handleSave = async (e) => {
-        e.preventDefault();
-        const form = e.target;
-        if (form.id === 'profileForm' && document.getElementById('inputNif')) {
-            const nif = document.getElementById('inputNif').value;
-            const pais = document.getElementById('selectPais').value;
-            if (pais === 'ES' && nif && !isValidNif(nif)) {
-                showToast('<?php echo __('nif_error'); ?>', 'error');
-                return;
-            }
+        // Prevenimos el refresco de página
+        if (e && e.preventDefault) e.preventDefault();
+        
+        // Obtenemos el formulario correctamente
+        const form = (e && e.target && e.target.tagName === 'FORM') ? e.target : 
+                     (e && e.tagName === 'FORM') ? e : 
+                     (e && e.form) ? e.form : null;
+        
+        if (!form) {
+            console.error("No se encontró el formulario");
+            return;
         }
+
         const formData = new FormData(form);
+        
         try {
             const res = await fetch('api/usuarios.php', {
                 method: 'POST',
                 body: formData
             });
             const data = await res.json();
+            
             if (data.success) {
                 showToast("<?php echo __('key_js_saved'); ?>", 'success');
-                setTimeout(() => location.reload(), 1500);
-                if (form.id === 'themeForm') sessionStorage.removeItem('temp_theme_color');
+                // Recargamos para que el avatar de la cabecera de la web se actualice
+                setTimeout(() => location.reload(), 800);
             } else {
-                showToast(data.error || 'Error', 'error');
+                showToast(data.error || 'Error al guardar', 'error');
             }
         } catch (err) {
-            showToast('Error de conexión', 'error');
+            console.error(err);
+            showToast('Error de conexión con el servidor', 'error');
         }
     };
     document.querySelectorAll('form').forEach(f => f.addEventListener('submit', handleSave));
@@ -301,4 +385,26 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
         data.forEach(c => sel.innerHTML += `<option value="${c.id}" ${c.id == savedCity ? 'selected' : ''}>${c.nombre}</option>`);
     }
     document.addEventListener('DOMContentLoaded', loadPaises);
+
+    function resetBrandingColors() {
+        const form = document.getElementById('brandingForm');
+        if (form) {
+            // Ponemos los colores por defecto de la App
+            form.querySelector('input[name="mb_color_primario"]').value = '#6366f1';
+            form.querySelector('input[name="mb_color_secundario"]').value = '#4f46e5';
+            showToast('Colores restablecidos. Pulsa Guardar para aplicar.', 'success');
+        }
+    }
+
+    function updateProfilePreview(type, emoji, id = 0) {
+        if(type === 'avatar') {
+            document.getElementById('pAvatar').innerText = emoji;
+        } else {
+            const hat = document.getElementById('pHat');
+            hat.innerText = (id == 0) ? '' : emoji;
+            hat.classList.remove('animating');
+            void hat.offsetWidth;
+            if(id > 0) hat.classList.add('animating');
+        }
+    }
 </script>
