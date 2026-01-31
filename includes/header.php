@@ -2,12 +2,42 @@
 // includes/header.php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-// Configuración básica
+require_once 'config/db.php';
+$db = (new Database())->getConnection();
+
+$uid = $_SESSION['user_id'];
+$role = $_SESSION['user_role'];
 $vista = $_GET['view'] ?? 'dashboard';
 $lang = $_SESSION['lang'] ?? 'es';
-$tema_db = $_SESSION['tema_pref'] ?? '210'; 
 
-// Datos para el título e icono según la vista
+// --- NUEVO: Recuperar tema preferido si no está en sesión ---
+if (!isset($_SESSION['tema_pref'])) {
+    $stmtTema = $db->prepare("SELECT tema_pref FROM usuarios WHERE id_usuario = ?");
+    $stmtTema->execute([$uid]);
+    $_SESSION['tema_pref'] = $stmtTema->fetchColumn() ?: '210';
+}
+
+// --- LÓGICA DE MARCA BLANCA (HERENCIA) ---
+// El "Dueño" es la Academia (si existe id_padre) o el propio usuario
+$ownerId = (!empty($_SESSION['id_padre'])) ? $_SESSION['id_padre'] : $uid;
+
+$stmtBrand = $db->prepare("SELECT mb_bg_proyector, mb_color_primario, mb_color_secundario, 
+                                  mb_txt_bienvenida, mb_txt_exito, mb_logo_marca, nombre 
+                           FROM usuarios WHERE id_usuario = ?");
+$stmtBrand->execute([$ownerId]);
+$brand = $stmtBrand->fetch(PDO::FETCH_ASSOC);
+
+// Variables de marca con valores por defecto (GaliEdu estándar)
+$branding = [
+    'primary'   => $brand['mb_color_primario'] ?? '#6366f1',
+    'secondary' => $brand['mb_color_secundario'] ?? '#4f46e5',
+    'bg'        => $brand['mb_bg_proyector'] ?? 'assets/img/bg-proyector.jpg',
+    'logo'      => $brand['mb_logo_marca'] ?? 'assets/img/logo-default.png',
+    'welcome'   => $brand['mb_txt_bienvenida'] ?? '¡Bienvenidos!',
+    'name'      => $brand['nombre'] ?? 'EduGame'
+];
+
+// Configuración de textos del Header
 $headerData = [
     'dashboard' => ['icon' => 'fa-chart-line', 'title' => __('control_panel')],
     'usuarios' => ['icon' => 'fa-users', 'title' => __('user_management')],
@@ -23,11 +53,44 @@ $currentIcon = $headerData[$vista]['icon'] ?? 'fa-folder';
 $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
 ?>
 
+<style>
+:root {
+    <?php 
+    // Lógica para detectar WebP automáticamente
+    $info = pathinfo($branding['bg']);
+    $bg_webp = $info['dirname'] . '/' . $info['filename'] . '.webp';
+    
+    if (!file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $bg_webp)) {
+        $bg_webp = $branding['bg'];
+    }
+    ?>
+    --bg-proyector-webp: url('<?php echo $bg_webp; ?>');
+    --bg-proyector-jpg: url('<?php echo $branding['bg']; ?>');
+}
+</style>
+
 <script>
     (function() {
-        const dbTheme = "<?php echo $tema_db; ?>";
+        // 1. Prioridad Máxima: Tema temporal elegido en la sesión actual
         const sessionTheme = sessionStorage.getItem('temp_theme_color');
-        document.documentElement.style.setProperty('--hue', sessionTheme || dbTheme);
+        
+        // 2. Detectar si la Marca Blanca es "Real" (colores distintos al default)
+        const hasBrand = "<?php echo ($brand['mb_color_primario'] ?? '#6366f1') !== '#6366f1' ? '1' : '0'; ?>" === "1";
+        
+        // 3. Tema de la base de datos
+        const dbTheme = "<?php echo $_SESSION['tema_pref'] ?? '210'; ?>";
+
+        if (sessionTheme) {
+            // Si el usuario eligió un color en el menú hace un momento, lo respetamos
+            document.documentElement.style.setProperty('--hue', sessionTheme);
+        } else if (hasBrand) {
+            // Si hay Marca Blanca y NO hay elección temporal, la Marca Blanca GANA siempre al entrar
+            document.documentElement.style.setProperty('--primary', '<?php echo $branding['primary']; ?>');
+            document.documentElement.style.setProperty('--primary-hover', '<?php echo $branding['secondary']; ?>');
+        } else if (dbTheme !== '210') {
+            // Solo si NO hay Marca Blanca, usamos el tema preferido del perfil
+            document.documentElement.style.setProperty('--hue', dbTheme);
+        }
     })();
 </script>
 
@@ -103,11 +166,14 @@ window.changeLanguage = function(lang) {
 };
 
 window.setSessionTheme = function(hue) {
-    document.documentElement.style.setProperty('--hue', hue);
-    sessionStorage.setItem('temp_theme_color', hue);
-    const colorMenu = document.getElementById('colorMenu');
-    if (colorMenu) colorMenu.classList.remove('show');
-};
+        sessionStorage.setItem('temp_theme_color', hue);
+        document.documentElement.style.setProperty('--hue', hue);
+        // ALERTA: Al elegir un tema manual, eliminamos los colores fijos de marca blanca
+        // para que el navegador use la fórmula HSL basada en el nuevo --hue
+        document.documentElement.style.removeProperty('--primary');
+        document.documentElement.style.removeProperty('--primary-hover');
+        document.getElementById('colorMenu').classList.remove('show');
+    }
 
 window.toggleBackgroundEffect = function() {
     const canvas = document.getElementById('bg-canvas');
