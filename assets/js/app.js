@@ -1,10 +1,25 @@
 // assets/js/app.js
 
+// assets/js/app.js - Gestor de Avatares y Accesorios
+// assets/js/app.js - Gestor de Avatares y Accesorios
+var AvatarManager = AvatarManager || {
+    baseAvatars: { 1:'👨', 2:'👩', 3:'👧', 4:'👦', 5:'👴', 6:'👵', 7:'🤴', 8:'👸', 9:'🧔', 10:'👳', 11:'👱', 12:'👰', 13:'👲', 14:'👽', 15:'🤖' },
+    hats: { 0: '', 1: '🎓', 2: '👑', 3: '🎧' },
+    render: function(avatarId, hatId = 0) {
+        const base = this.baseAvatars[avatarId] || '👤';
+        const hat = this.hats[hatId] || '';
+        return `<div class="avatar-display" style="position:relative; display:inline-block; font-size:inherit; line-height:1;">
+                    <span class="avatar-emoji">${base}</span>
+                    <span class="avatar-hat" style="position:absolute; top:-0.55em; left:0; width:100%; text-align:center; font-size:0.85em;">${hat}</span>
+                </div>`;
+    }
+};
+
 // --- VARIABLES DE ESTADO ---
-let currentPage = 1;
-let currentLimit = 10;
-let currentSort = 'nombre_jugador';
-let currentOrder = 'ASC';
+var currentPage = currentPage || 1;
+var currentLimit = currentLimit || 10;
+var currentSort = currentSort || 'nombre_jugador';
+var currentOrder = currentOrder || 'ASC';
 
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Iniciar Vista (URL o Default)
