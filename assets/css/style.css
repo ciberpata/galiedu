@@ -68,6 +68,8 @@ table {
     --text-main: #1e293b;
     --text-muted: #64748b;
     --border-color: #e2e8f0;
+    --bg-proyector-webp: url('../img/bg-proyector.webp');
+    --bg-proyector-jpg: url('../img/bg-proyector.jpg');
     
     --radius: 0.5rem;
     --danger-color: #ef4444;
@@ -79,6 +81,17 @@ table {
     
     --header-height: 64px;
     --sidebar-width: 260px;
+}
+
+/* Aplicación del fondo en el proyector usando image-set para compatibilidad automática */
+body.proyector-view {
+    background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), var(--bg-proyector-jpg);
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+                      -webkit-image-set(var(--bg-proyector-webp) 1x, var(--bg-proyector-jpg) 1x);
+    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+                      image-set(var(--bg-proyector-webp) type("image/webp"), var(--bg-proyector-jpg) type("image/jpeg"));
+    background-size: cover;
+    background-position: center;
 }
 
 /* --- MODO NOCHE --- */
@@ -723,8 +736,6 @@ th.sortable:hover { background-color: rgba(0,0,0,0.05); }
     background-color: #dc2626; /* Un rojo un poco más oscuro */
 }
 
-
-
 /* --- FUNDAMENTOS RESPONSIVOS Y ACCESIBILIDAD --- */
 #bg-canvas {
     position: fixed;
@@ -751,18 +762,6 @@ body.dark .card-spectacular {
     background: rgba(15, 23, 42, 0.4);
 }
 
-/* Ajustes Responsive críticos para móviles */
-@media (max-width: 768px) {
-    .header-page-title span { display: none; } /* Solo icono en móviles muy pequeños para ahorrar espacio */
-    .header-actions { gap: 4px; }
-    .btn-mini { width: 32px; height: 32px; }
-    
-    /* Mejorar toque en móviles (A11y) */
-    .nav-item, .btn-primary, .btn-icon {
-        min-height: 44px; /* Tamaño mínimo recomendado por Apple/Google */
-    }
-}
-
 /* Soporte para Marca Blanca */
 .white-label-hidden {
     display: none !important;
@@ -784,6 +783,119 @@ body.dark .card-spectacular {
 .text-right {
     white-space: nowrap !important; /* Los botones de acción sí deben ir en una línea */
 }
+
+/* --- ESTILOS PARA EL AVISO (TOAST) --- */
+#toast {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: var(--primary);
+    color: #fff;
+    text-align: center;
+    border-radius: var(--radius);
+    padding: 16px;
+    position: fixed;
+    z-index: 10001;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    box-shadow: var(--shadow-lg);
+    transition: opacity 0.3s, visibility 0.3s;
+    opacity: 0;
+}
+
+#toast.show {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Estilo visual de la Dificultad en el listado de preguntas*/
+.diff-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: white;
+    background: #94a3b8; /* Gris por defecto */
+}
+.diff-1 { background-color: #22c55e; } /* Muy fácil - Verde */
+.diff-2 { background-color: #84cc16; } /* Fácil - Lima */
+.diff-3 { background-color: #eab308; } /* Media - Amarillo */
+.diff-4 { background-color: #f97316; } /* Difícil - Naranja */
+.diff-5 { background-color: #ef4444; } /* Muy difícil - Rojo */
+
+/* Estilo visual de las etiquetas en el listado de preguntas */
+
+.tags-container { display: flex; flex-wrap: wrap; gap: 4px; max-width: 200px; }
+.tag-pill {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.tag-pill i { font-size: 0.6rem; opacity: 0.7; }
+
+/* Animación elegante de caída de sombrero */
+@keyframes hatDrop {
+    0% { transform: translateY(-60px) scale(1.2); opacity: 0; }
+    60% { transform: translateY(5px) scale(0.9); opacity: 1; }
+    100% { transform: translateY(0) scale(1); }
+}
+
+.avatar-hat.animating {
+    animation: hatDrop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.avatar-preview-box {
+    background: rgba(255,255,255,0.1);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    border: 2px dashed rgba(255,255,255,0.2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 150px;
+}
+
+/* POSICIONAMIENTO REAL: EL SOMBRERO ENCIMA DE LA CABEZA */
+.preview-emoji-container {
+    font-size: 6rem;
+    position: relative;
+    /* CAMBIO: inline-flex ajusta el contenedor al ancho del emoji */
+    display: inline-flex; 
+    justify-content: center;
+    align-items: center;
+    line-height: 1;
+    margin-top: 45px;
+}
+
+.avatar-hat {
+    position: absolute;
+    /* CAMBIO: Centrado absoluto quirúrgico */
+    top: -0.6em; 
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    text-align: center;
+    font-size: 0.85em; 
+    pointer-events: none;
+    z-index: 10;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
+}
+
+#pAvatar, #previewAvatar {
+    line-height: 1;
+    display: block;
+}
+
 /* =========================================
    MEDIA QUERIES (RESPONSIVE)
    ========================================= */
@@ -900,8 +1012,17 @@ body.dark .card-spectacular {
    --- AJUSTES ESPECÍFICOS DIAGNÓSTICO (V6) ---
    ========================================= */
 
-/* Ajuste para que las tablas de diagnóstico no revienten la tarjeta en móvil */
+
 @media (max-width: 768px) {
+    .header-page-title span { display: none; } /* Solo icono en móviles muy pequeños para ahorrar espacio */
+    .header-actions { gap: 4px; }
+    .btn-mini { width: 32px; height: 32px; }
+    
+    /* Mejorar toque en móviles (A11y) */
+    .nav-item, .btn-primary, .btn-icon {
+        min-height: 44px; /* Tamaño mínimo recomendado por Apple/Google */
+    }
+    /* Ajuste para que las tablas de diagnóstico no revienten la tarjeta en móvil */
     .diag-card .table-container {
         margin-bottom: 0; /* Quitar margen extra */
         border: none; /* Quitar borde del contenedor para que se funda con la tarjeta */
@@ -920,7 +1041,6 @@ body.dark .card-spectacular {
         font-size: 0.85rem;
     }
 }
-
 
 /* --- AJUSTES MÓVILES EXTREMOS --- */
 @media (max-width: 600px) {
@@ -941,7 +1061,6 @@ body.dark .card-spectacular {
         width: 100%;
     }
 }
-
 
 /* Ajustes específicos para móviles */
 @media (max-width: 480px) {
