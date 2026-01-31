@@ -24,7 +24,7 @@ if (isset($_SESSION['user_id'])) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        /* TEMA MODERNO - ESTILO KAHOOT */
+        /* TEMA MODERNO - ESTILO GALIEDU */
         :root { 
             --bg-gradient: linear-gradient(135deg, #46178f 0%, #25076b 100%);
             --primary: #333; 
@@ -177,6 +177,7 @@ if (isset($_SESSION['user_id'])) {
         .rank-medal { font-size: 1.5rem; width: 40px; text-align: center; }
 
     </style>
+    <script src="../assets/js/app.js"></script>
 </head>
 <body>
 
@@ -206,9 +207,30 @@ if (isset($_SESSION['user_id'])) {
     </div>
 
     <div id="screen-avatar" class="screen">
-        <h2 id="txtChooseAvatar">Elige tu personaje</h2>
-        <div class="avatar-grid" id="avatarList"></div>
-        <button class="btn-play" style="max-width: 200px; margin-top:20px;" onclick="step2Avatar()" id="btnConfirmAvatar">¡Listo!</button>
+        <h2 id="txtChooseAvatar">Personaliza tu Héroe</h2>
+        
+        <div class="avatar-preview-box">
+            <div class="preview-emoji-container">
+                <span id="previewAvatar">👤</span>
+                <span id="previewHat" class="avatar-hat"></span>
+            </div>
+        </div>
+
+        <div id="step-avatar-list">
+            <p>1. Elige tu Avatar</p>
+            <div class="avatar-grid" id="avatarList"></div>
+        </div>
+
+        <div id="step-hat-list" style="display:none;">
+            <p>2. Añade un Accesorio</p>
+            <div class="avatar-grid" id="hatList"></div>
+        </div>
+
+        <div style="margin-top:20px; display:flex; gap:10px;">
+            <button class="btn-play" id="btnPrev" style="display:none; background:#666;" onclick="toggleAvatarStep(1)">Atrás</button>
+            <button class="btn-play" id="btnNext" onclick="toggleAvatarStep(2)">Siguiente</button>
+            <button class="btn-play" id="btnConfirmAvatar" style="display:none;" onclick="step2Avatar()">¡Listo!</button>
+        </div>
     </div>
 
     <div id="screen-wait" class="screen">
@@ -220,6 +242,7 @@ if (isset($_SESSION['user_id'])) {
             <div class="wait-animation">👀</div>
             <div style="font-size: 2rem; font-weight: 800; margin-bottom: 10px;" id="waitText">Ya estás dentro</div>
             <div style="font-size: 1.2rem; opacity: 0.8;" id="waitSubText">Mira la pantalla</div>
+            <div id="waitPhrase" style="margin-top: 40px; font-size: 1.3rem; font-style: italic; opacity: 0.9; font-weight: 600; padding: 0 20px; min-height: 3em;"></div>
         </div>
     </div>
 
@@ -319,39 +342,65 @@ if (isset($_SESSION['user_id'])) {
     }
 
     // --- 2. VARS JUEGO ---
-    const SHAPES = ['▲', '◆', '●', '■'];
-    const AVATARS = [
-        {id:1, i:'🛡️'}, {id:2, i:'⚔️'}, {id:3, i:'🗡️'},
-        {id:4, i:'🏛️'}, {id:5, i:'🏹'}, {id:6, i:'🔮'},
-        {id:7, i:'🥷'}, {id:8, i:'🏴‍☠️'}, {id:9, i:'🌿'},
-        {id:10, i:'⚜️'}, {id:11, i:'🤖'}, {id:12, i:'👽'},
-        {id:13, i:'🦊'}, {id:14, i:'🦁'}, {id:15, i:'🦄'}
-    ];
-    function getAvatarIcon(id) { const a = AVATARS.find(x=>x.id==id); return a ? a.i : '👤'; }
-
+    const SHAPES = ['▲', '◆', '●', '■']; // Define los iconos de los botones
     let mySessionId = null;
     let gamePartidaId = null;
-    let selectedAvatarId = null;
     let lastPhase = '';
     let currentScore = 0;
     let myNick = '';
 
-    const grid = document.getElementById('avatarList');
-    AVATARS.forEach(av => {
-        grid.innerHTML += `<div class="avatar-card" onclick="selectAvatar(${av.id}, this)">${av.i}</div>`;
-    });
+    // Variables temporales para el selector de dos pasos (Gamificación)
+    let tempAvatarId = 1;
+    let tempHatId = 0;
 
-    function selectAvatar(id, el) {
-        selectedAvatarId = id;
-        document.querySelectorAll('.avatar-card').forEach(c => c.classList.remove('selected'));
+    function initGrids() {
+        const aGrid = document.getElementById('avatarList');
+        aGrid.innerHTML = '';
+        Object.entries(AvatarManager.baseAvatars).forEach(([id, icon]) => {
+            aGrid.innerHTML += `<div class="avatar-card" onclick="selectAvatar(${id}, '${icon}', this)">${icon}</div>`;
+        });
+
+        const hGrid = document.getElementById('hatList');
+        hGrid.innerHTML = '';
+        Object.entries(AvatarManager.hats).forEach(([id, icon]) => {
+            hGrid.innerHTML += `<div class="avatar-card" onclick="selectHat(${id}, '${icon}', this)">${icon || '❌'}</div>`;
+        });
+    }
+
+    function selectAvatar(id, icon, el) {
+        tempAvatarId = id;
+        document.getElementById('previewAvatar').innerText = icon;
+        document.querySelectorAll('#avatarList .avatar-card').forEach(c => c.classList.remove('selected'));
         el.classList.add('selected');
+    }
+
+    function selectHat(id, icon, el) {
+        tempHatId = id;
+        const hatEl = document.getElementById('previewHat');
+        hatEl.innerText = icon;
+        // Lanzar animación elegante definida en style.css
+        hatEl.classList.remove('animating');
+        void hatEl.offsetWidth; 
+        if(id > 0) hatEl.classList.add('animating');
+        
+        document.querySelectorAll('#hatList .avatar-card').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+
+    function toggleAvatarStep(step) {
+        document.getElementById('step-avatar-list').style.display = (step === 1) ? 'block' : 'none';
+        document.getElementById('step-hat-list').style.display = (step === 2) ? 'block' : 'none';
+        document.getElementById('btnNext').style.display = (step === 1) ? 'block' : 'none';
+        document.getElementById('btnPrev').style.display = (step === 2) ? 'block' : 'none';
+        document.getElementById('btnConfirmAvatar').style.display = (step === 2) ? 'block' : 'none';
     }
 
     // --- 3. LÓGICA ---
 
     async function step1Login() {
-        const pin = document.getElementById('inputPin').value;
-        const nick = document.getElementById('inputNick').value;
+        // Limpiamos espacios y convertimos a mayúsculas
+        const pin = document.getElementById('inputPin').value.trim().toUpperCase();
+        const nick = document.getElementById('inputNick').value.trim();
         if(!pin || !nick) return alert("Faltan datos");
         myNick = nick;
         try {
@@ -368,29 +417,35 @@ if (isset($_SESSION['user_id'])) {
                 gamePartidaId = json.id_partida;
                 document.getElementById('myNickDisplay').innerText = myNick;
                 
-                // Si la API dice que ya tenemos avatar (del perfil), saltamos la pantalla
                 if (json.has_avatar) {
-                    const avatarDelPerfil = <?php echo $loggedUser['avatar_id'] ?? 0; ?>;
-                    document.getElementById('myAvatarDisplay').innerText = getAvatarIcon(avatarDelPerfil);
+                    document.getElementById('myAvatarDisplay').innerHTML = AvatarManager.render(json.avatar_id, json.sombrero_id || 0);
                     document.getElementById('playerFooter').style.display = 'flex';
                     showWaitScreen("Ya estás dentro", "Mira la pantalla");
                     startPolling();
                 } else {
+                    initGrids(); // Inicializamos las rejillas dinámicas desde AvatarManager
                     showScreen('screen-avatar'); 
                 }
-            } 
+            }
             else { alert(json.error); }
         } catch(e) { console.error(e); alert("Error de conexión"); }
     }
 
     async function step2Avatar() {
-        if(!selectedAvatarId) return alert(UI_TEXTS[currentLang].choose);
         document.getElementById('btnConfirmAvatar').disabled = true;
         try {
-            const res = await fetch('../api/juego.php', { method: 'POST', body: JSON.stringify({action:'seleccionar_avatar', id_sesion:mySessionId, avatar_id: selectedAvatarId}) });
+            const res = await fetch('../api/juego.php', { 
+                method: 'POST', 
+                body: JSON.stringify({
+                    action:'seleccionar_avatar', 
+                    id_sesion:mySessionId, 
+                    avatar_id: tempAvatarId, 
+                    sombrero_id: tempHatId 
+                }) 
+            });
             const json = await res.json();
             if(json.success) { 
-                document.getElementById('myAvatarDisplay').innerText = getAvatarIcon(selectedAvatarId);
+                document.getElementById('myAvatarDisplay').innerHTML = AvatarManager.render(tempAvatarId, tempHatId);
                 document.getElementById('playerFooter').style.display = 'flex'; 
                 showWaitScreen(UI_TEXTS[currentLang].wait, UI_TEXTS[currentLang].wait_sub);
                 startPolling(); 
@@ -434,6 +489,23 @@ if (isset($_SESSION['user_id'])) {
 
     function updateUI(data) {
         const t = UI_TEXTS[currentLang];
+        
+        // --- PERSISTENCIA LOCAL: Evitamos que el sombrero desaparezca si no viene en el poll ---
+        if (data.avatar_id) window.myLastAvatar = data.avatar_id;
+        if (data.sombrero_id !== undefined) window.myLastHat = data.sombrero_id;
+
+        try {
+            // Usamos los datos guardados en la ventana para mayor estabilidad
+            if (window.myLastAvatar && typeof AvatarManager !== 'undefined') {
+                const container = document.getElementById('myAvatarDisplay');
+                if (container) {
+                    container.innerHTML = AvatarManager.render(window.myLastAvatar, window.myLastHat || 0);
+                    document.getElementById('playerFooter').style.display = 'flex';
+                }
+            }
+        } catch (e) {
+            console.warn("Error visual en avatar, pero el juego continúa.");
+        }
 
         if (data.puntuacion !== undefined && data.puntuacion !== null) {
             currentScore = parseInt(data.puntuacion);
@@ -493,8 +565,7 @@ if (isset($_SESSION['user_id'])) {
                     showScreen('screen-feedback');
                     const racha = parseInt(data.racha || 0);
                     const banner = document.getElementById('fbBanner');
-                    const streakDisplay = document.getElementById('fbStreak');
-                    streakDisplay.innerText = racha;
+                    document.getElementById('fbStreak').innerText = racha;
 
                     if (racha > 0) {
                         banner.className = "feedback-banner";
@@ -505,7 +576,23 @@ if (isset($_SESSION['user_id'])) {
                         document.getElementById('fbTitle').innerText = t.wrong;
                         document.getElementById('fbIcon').className = "fa-solid fa-xmark fb-icon";
                     }
+                    
+                    // MOSTRAR MENSAJE DE ÁNIMO SEGÚN RACHA
                     document.getElementById('fbMsg').innerText = getRandomPhrase(racha > 0 ? 'subiendo' : 'bajando');
+
+                    // MOSTRAR TOP 3 EN LA PANTALLA DEL ALUMNO
+                    if(data.top_ranking) {
+                        const msgBox = document.getElementById('fbMsg');
+                        let html = '<div style="margin-top:20px; background:rgba(255,255,255,0.1); padding:15px; border-radius:10px; text-align:left;">';
+                        data.top_ranking.forEach((u, i) => {
+                            html += `<div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.9rem;">
+                                <span>${i+1}. ${u.nombre_nick}</span>
+                                <b>${u.puntuacion}</b>
+                            </div>`;
+                        });
+                        html += '</div>';
+                        msgBox.innerHTML += html;
+                    }
                 }
             }
         }
@@ -556,6 +643,8 @@ if (isset($_SESSION['user_id'])) {
         showScreen('screen-wait');
         document.getElementById('waitText').innerText = title;
         document.getElementById('waitSubText').innerText = sub;
+        // Limpiamos la frase para que no aparezca en la espera inicial del lobby
+        if(document.getElementById('waitPhrase')) document.getElementById('waitPhrase').innerText = "";
     }
 
     function getRandomPhrase(category) {
