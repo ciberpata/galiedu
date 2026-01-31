@@ -261,7 +261,8 @@ function borrarPartida($db, $uid, $role, $idPartida) {
 }
 
 function verJugadores($db, $idPartida) {
-    $sql = "SELECT id_sesion, nombre_nick, avatar_id, puntuacion 
+    // AÑADIDO: sombrero_id para el renderizado del proyector
+    $sql = "SELECT id_sesion, nombre_nick, avatar_id, sombrero_id, puntuacion 
             FROM jugadores_sesion 
             WHERE id_partida = ? AND avatar_id > 0 
             ORDER BY puntuacion DESC";
@@ -294,7 +295,15 @@ function getInfoProyector($db, $pin) {
     $stmt = $db->prepare($sql);
     $stmt->execute([$pin]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
+    
     if ($data) {
+        // ARREGLO: Al abrir el proyector, pasamos de 'creada' a 'sala_espera' 
+        // para permitir que los alumnos entren sin recibir error de PIN.
+        if ($data['estado'] === 'creada') {
+            $db->prepare("UPDATE partidas SET estado = 'sala_espera' WHERE id_partida = ?")->execute([$data['id_partida']]);
+            $data['estado'] = 'sala_espera';
+        }
+
         if (empty($data['nombre_academia'])) { 
             $data['nombre_visual'] = $data['nombre_profesor']; 
             $data['logo_visual'] = $data['foto_profesor']; 
@@ -303,7 +312,9 @@ function getInfoProyector($db, $pin) {
             $data['logo_visual'] = $data['logo_academia']; 
         }
         echo json_encode(['success' => true, 'data' => $data]);
-    } else { echo json_encode(['success' => false, 'error' => 'Partida no encontrada']); }
+    } else { 
+        echo json_encode(['success' => false, 'error' => 'Partida no encontrada']); 
+    }
 }
 
 function obtenerEstadoJuego($db, $pin) {
@@ -420,7 +431,7 @@ function expulsarJugador($db, $uid, $idSesion) {
 }
 
 function getRankingParcial($db, $idPartida) {
-    $sql = "SELECT nombre_nick, puntuacion, avatar_id, racha FROM jugadores_sesion WHERE id_partida = ? AND avatar_id > 0 ORDER BY puntuacion DESC LIMIT 5";
+    $sql = "SELECT nombre_nick, puntuacion, avatar_id, sombrero_id, racha FROM jugadores_sesion WHERE id_partida = ? AND avatar_id > 0 ORDER BY puntuacion DESC LIMIT 5";
     $stmt = $db->prepare($sql);
     $stmt->execute([$idPartida]);
     echo json_encode(['success' => true, 'ranking' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);

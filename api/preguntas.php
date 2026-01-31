@@ -366,19 +366,29 @@ function handleBulkAction($db, $uid, $role, $data)
     $ids = $data['ids'] ?? $data['question_ids'] ?? [];
     $type = $data['type'] ?? '';
     if (empty($ids)) throw new Exception("No hay elementos seleccionados");
-    $in = str_repeat('?,', count($ids) - 1) . '?';
-    $params = $ids;
-    if ($type === 'delete') {
-        $sql = "UPDATE preguntas SET fecha_eliminacion = NOW() WHERE id_pregunta IN ($in)";
-    } elseif ($type === 'restore') {
-        $sql = "UPDATE preguntas SET fecha_eliminacion = NULL WHERE id_pregunta IN ($in)";
-    } elseif ($type === 'reassign') {
-        $target = $data['target'] ?? $data['new_owner_id'];
-        $sql = "UPDATE preguntas SET id_propietario = ? WHERE id_pregunta IN ($in)";
-        array_unshift($params, $target);
+
+    try {
+        $db->beginTransaction(); // Inicio de transacción segura 
+        $in = str_repeat('?,', count($ids) - 1) . '?';
+        $params = $ids;
+
+        if ($type === 'delete' || $type === 'bulk_delete') {
+            $sql = "UPDATE preguntas SET fecha_eliminacion = NOW() WHERE id_pregunta IN ($in)";
+        } elseif ($type === 'restore') {
+            $sql = "UPDATE preguntas SET fecha_eliminacion = NULL WHERE id_pregunta IN ($in)";
+        } elseif ($type === 'reassign' || $type === 'bulk_reassign') {
+            $target = $data['target'] ?? $data['new_owner_id'];
+            $sql = "UPDATE preguntas SET id_propietario = ? WHERE id_pregunta IN ($in)";
+            array_unshift($params, $target);
+        }
+
+        $db->prepare($sql)->execute($params);
+        $db->commit(); // Confirmar cambios masivos
+        echo json_encode(["success" => true]);
+    } catch (Exception $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $e;
     }
-    $db->prepare($sql)->execute($params);
-    echo json_encode(["success" => true]);
 }
 
 function checkOwner($db, $idPregunta, $uid, $role)
@@ -450,12 +460,27 @@ function handleValidateImport()
         return;
     }
 
-    // SIEMPRE devolvemos 'need_mapping' para que el usuario vea la tabla de columnas
-    echo json_encode(['status' => 'need_mapping', 'headers' => $header]);
+    // Validación de sintaxis fila por fila
+    $lineNum = 1;
+    $expectedCols = count($header);
+    $errors = [];
+
+    while (($row = fgetcsv($fh, 0, $delim, '"', '\\')) !== false) {
+        $lineNum++;
+        if (count($row) !== $expectedCols) {
+            $errors[] = "Fila $lineNum: Tiene " . count($row) . " columnas (se esperaban $expectedCols). Revise si hay puntos y coma extra.";
+        }
+    }
+    fclose($fh);
+
+    if (!empty($errors)) {
+        echo json_encode(['status' => 'error', 'mensaje' => 'Errores de sintaxis detectados:', 'detalles' => $errors]);
+    } else {
+        echo json_encode(['status' => 'need_mapping', 'headers' => $header]);
+    }
 }
 
-function handleExecuteImport($db, $uid, $role, $postData)
-{
+function handleExecuteImport($db, $uid, $role, $postData) {
     // Misma lógica de asignación que saveQuestion
     $targetId = $uid;
     $compartida = 0;
@@ -486,118 +511,141 @@ function handleExecuteImport($db, $uid, $role, $postData)
     $stmtIns = $db->prepare($sqlIns);
 
     // Lógica Excel
-    if ($mappingJSON && in_array($ext, ['xls', 'xlsx', 'ods'])) {
-        $map = json_decode($mappingJSON, true);
-        $spreadsheet = IOFactory::load($file);
-        $sheet = $spreadsheet->getActiveSheet();
-        $highestRow = $sheet->getHighestRow();
-        for ($rowIdx = 2; $rowIdx <= $highestRow; $rowIdx++) {
-            $getVal = function ($key) use ($map, $sheet, $rowIdx) {
-                if (!isset($map[$key])) return '';
-                $colIndex = $map[$key] + 1;
-                $colString = Coordinate::stringFromColumnIndex($colIndex);
-                return trim($sheet->getCell($colString . $rowIdx)->getValue() ?? '');
-            };
-            $texto = $getVal('texto');
-            if (empty($texto)) continue;
-            $stmtCheck->execute([$texto, $targetId]);
-            if ($stmtCheck->fetch()) {
-                $skipped++;
-                continue;
+    try {
+        // Iniciamos la transacción: a partir de aquí, nada se guarda definitivamente hasta el commit
+        $db->beginTransaction();
+
+        if ($mappingJSON && in_array($ext, ['xls', 'xlsx', 'ods'])) {
+            $map = json_decode($mappingJSON, true);
+            $spreadsheet = IOFactory::load($file);
+            $sheet = $spreadsheet->getActiveSheet();
+            $highestRow = $sheet->getHighestRow();
+            for ($rowIdx = 2; $rowIdx <= $highestRow; $rowIdx++) {
+                $getVal = function ($key) use ($map, $sheet, $rowIdx) {
+                    if (!isset($map[$key])) return '';
+                    $colIndex = $map[$key] + 1;
+                    $colString = Coordinate::stringFromColumnIndex($colIndex);
+                    return trim($sheet->getCell($colString . $rowIdx)->getValue() ?? '');
+                };
+                $texto = $getVal('texto');
+                if (empty($texto)) continue;
+                $stmtCheck->execute([$texto, $targetId]);
+                if ($stmtCheck->fetch()) {
+                    $skipped++;
+                    continue;
+                }
+
+                $opciones = [];
+                $rcRaw = strtolower($getVal('correcta'));
+                $rcIndex = -1;
+                if (in_array($rcRaw, ['1', 'a', 'opcion_a', 'verdadero'])) $rcIndex = 0;
+                elseif (in_array($rcRaw, ['2', 'b', 'opcion_b', 'falso'])) $rcIndex = 1;
+                elseif (in_array($rcRaw, ['3', 'c'])) $rcIndex = 2;
+                elseif (in_array($rcRaw, ['4', 'd'])) $rcIndex = 3;
+
+                $opciones[] = ['texto' => $getVal('a'), 'es_correcta' => ($rcIndex === 0)];
+                $opciones[] = ['texto' => $getVal('b'), 'es_correcta' => ($rcIndex === 1)];
+                if ($getVal('c')) $opciones[] = ['texto' => $getVal('c'), 'es_correcta' => ($rcIndex === 2)];
+                if ($getVal('d')) $opciones[] = ['texto' => $getVal('d'), 'es_correcta' => ($rcIndex === 3)];
+
+                $tipo = (count($opciones) == 2 && strtolower($opciones[0]['texto']) == 'verdadero') ? 'verdadero_falso' : 'quiz';
+
+                $stmtIns->execute([
+                    $targetId,
+                    $texto,
+                    $getVal('seccion'),
+                    $tipo,
+                    $getVal('idioma') ?: 'es',
+                    (int)($getVal('tiempo') ?: 20),
+                    (int)($getVal('doble') ?: 0),
+                    json_encode($opciones, JSON_UNESCAPED_UNICODE),
+                    $compartida,
+                    $getVal('asignatura'),
+                    $getVal('nivel'),
+                    (int)($getVal('dificultad') ?: 1),
+                    $getVal('etiquetas')
+                ]);
+                $inserted++;
             }
+        } else {
+            $fh = fopen($file, 'r');
+            $line = fgets($fh);
+            $delim = (substr_count($line, ';') > substr_count($line, ',')) ? ';' : ',';
+            rewind($fh);
+            $header = fgetcsv($fh, 0, $delim, '"', '\\');
+            $decodedMap = json_decode($mappingJSON, true);
+            $map = (!empty($decodedMap)) ? $decodedMap : getCsvMap($header);
+            $currentRow = 1; // Contador de filas para informar errores
 
-            $opciones = [];
-            $rcRaw = strtolower($getVal('correcta'));
-            $rcIndex = -1;
-            if (in_array($rcRaw, ['1', 'a', 'opcion_a', 'opcion a', 'si', 'sí', 'verdadero'])) $rcIndex = 0;
-            elseif (in_array($rcRaw, ['2', 'b', 'opcion_b', 'opcion b', 'no', 'falso'])) $rcIndex = 1;
-            elseif (in_array($rcRaw, ['2', 'b', 'opcion_b', 'no', 'falso'])) $rcIndex = 1;
-            elseif (in_array($rcRaw, ['3', 'c'])) $rcIndex = 2;
-            elseif (in_array($rcRaw, ['4', 'd'])) $rcIndex = 3;
+            while (($row = fgetcsv($fh, 0, $delim, '"', '\\')) !== false) {
+                $currentRow++;
+                $v = function ($k) use ($row, $map, $currentRow) {
+                    if (!isset($map[$k])) return '';
+                    if (!isset($row[$map[$k]])) {
+                        throw new Exception("Error en fila $currentRow: Falta la columna asociada a '$k'.");
+                    }
+                    return trim($row[$map[$k]] ?? '');
+                };
+                $texto = $v('texto');
+                if (empty($texto)) continue;
+                $stmtCheck->execute([$texto, $targetId]);
+                if ($stmtCheck->fetch()) {
+                    $skipped++;
+                    continue;
+                }
 
-            $opciones[] = ['texto' => $getVal('a'), 'es_correcta' => ($rcIndex === 0)];
-            $opciones[] = ['texto' => $getVal('b'), 'es_correcta' => ($rcIndex === 1)];
-            if ($getVal('c')) $opciones[] = ['texto' => $getVal('c'), 'es_correcta' => ($rcIndex === 2)];
-            if ($getVal('d')) $opciones[] = ['texto' => $getVal('d'), 'es_correcta' => ($rcIndex === 3)];
+                $rcRaw = strtolower($v('correcta'));
+                $rcIndex = -1;
+                if (in_array($rcRaw, ['1', 'a', 'opcion_a', 'verdadero'])) $rcIndex = 0;
+                elseif (in_array($rcRaw, ['2', 'b', 'opcion_b', 'falso'])) $rcIndex = 1;
+                elseif (in_array($rcRaw, ['3', 'c'])) $rcIndex = 2;
+                elseif (in_array($rcRaw, ['4', 'd'])) $rcIndex = 3;
 
-            $tipo = (count($opciones) == 2 && strtolower($opciones[0]['texto']) == 'verdadero') ? 'verdadero_falso' : 'quiz';
+                $opciones = [];
+                $opciones[] = ['texto' => $v('a'), 'es_correcta' => ($rcIndex === 0)];
+                $opciones[] = ['texto' => $v('b'), 'es_correcta' => ($rcIndex === 1)];
+                if ($v('c')) $opciones[] = ['texto' => $v('c'), 'es_correcta' => ($rcIndex === 2)];
+                if ($v('d')) $opciones[] = ['texto' => $v('d'), 'es_correcta' => ($rcIndex === 3)];
 
-            $stmtIns->execute([
-                $targetId,
-                $texto,
-                $getVal('seccion'),
-                $tipo,
-                $getVal('idioma') ?: 'es',
-                (int)($getVal('tiempo') ?: 20),
-                (int)($getVal('doble') ?: 0),
-                json_encode($opciones, JSON_UNESCAPED_UNICODE),
-                $compartida,
-                $getVal('asignatura'),
-                $getVal('nivel'),
-                (int)($getVal('dificultad') ?: 1),
-                $getVal('etiquetas')
-            ]);
-            $inserted++;
-        }
-    } else {
-        // Lógica CSV
-        $fh = fopen($file, 'r');
-        $line = fgets($fh);
-        $delim = (substr_count($line, ';') > substr_count($line, ',')) ? ';' : ',';
-        rewind($fh);
-        $header = fgetcsv($fh, 0, $delim, '"', '\\');
-        $decodedMap = json_decode($mappingJSON, true);
-        $map = (!empty($decodedMap)) ? $decodedMap : getCsvMap($header);
-        while (($row = fgetcsv($fh, 0, $delim, '"', '\\')) !== false) {
-            $v = function ($k) use ($row, $map) {
-                return isset($map[$k]) ? trim($row[$map[$k]] ?? '') : '';
-            };
-            $texto = $v('texto');
-            if (empty($texto)) continue;
+                $tipo = (count($opciones) == 2 && strtolower($v('a')) == 'verdadero') ? 'verdadero_falso' : 'quiz';
 
-            $stmtCheck->execute([$texto, $targetId]);
-            if ($stmtCheck->fetch()) {
-                $skipped++;
-                continue;
+                $stmtIns->execute([
+                    $targetId,
+                    $texto,
+                    $v('seccion'),
+                    $tipo,
+                    $v('idioma') ?: 'es',
+                    (int)($v('tiempo') ?: 20),
+                    (int)($v('doble') ?: 0),
+                    json_encode($opciones, JSON_UNESCAPED_UNICODE),
+                    $compartida,
+                    $v('asignatura'),
+                    $v('nivel'),
+                    (int)($v('dificultad') ?: 1),
+                    $v('etiquetas')
+                ]);
+                $inserted++;
             }
-
-            // Traducir respuestas 1,2,3,4 a índices 0,1,2,3
-            $rcRaw = strtolower($v('correcta'));
-            $rcIndex = -1;
-            if (in_array($rcRaw, ['1', 'a', 'opcion_a', 'si', 'sí', 'verdadero'])) $rcIndex = 0;
-            elseif (in_array($rcRaw, ['2', 'b', 'opcion_b', 'no', 'falso'])) $rcIndex = 1;
-            elseif (in_array($rcRaw, ['3', 'c', 'opcion_c'])) $rcIndex = 2;
-            elseif (in_array($rcRaw, ['4', 'd', 'opcion_d'])) $rcIndex = 3;
-
-            $opciones = [];
-            $opciones[] = ['texto' => $v('a'), 'es_correcta' => ($rcIndex === 0)];
-            $opciones[] = ['texto' => $v('b'), 'es_correcta' => ($rcIndex === 1)];
-            if ($v('c')) $opciones[] = ['texto' => $v('c'), 'es_correcta' => ($rcIndex === 2)];
-            if ($v('d')) $opciones[] = ['texto' => $v('d'), 'es_correcta' => ($rcIndex === 3)];
-
-            $tipo = (count($opciones) == 2 && strtolower($v('a')) == 'verdadero') ? 'verdadero_falso' : 'quiz';
-
-            $stmtIns->execute([
-                $targetId,
-                $texto,
-                $v('seccion'),
-                $tipo,
-                $v('idioma') ?: 'es',
-                (int)($v('tiempo') ?: 20),
-                (int)($v('doble') ?: 0),
-                json_encode($opciones, JSON_UNESCAPED_UNICODE),
-                $compartida,
-                $v('asignatura'),
-                $v('nivel'),
-                (int)($v('dificultad') ?: 1),
-                $v('etiquetas')
-            ]);
-            $inserted++;
         }
+
+        // Si todo el bucle termina sin errores, confirmamos la transacción
+        $db->commit();
+
+       Logger::registrar($db, $uid, 'IMPORT', 'preguntas', null, ['inserted' => $inserted, 'skipped' => $skipped]);
+       ob_clean(); // Limpia cualquier salida previa (espacios, warnings)
+       echo json_encode(['status' => 'ok', 'insertadas' => $inserted, 'saltados' => $skipped, 'mensaje' => "$inserted preguntas importadas."]);
+       exit;
+    } catch (Exception $e) {
+        // Si algo falla en cualquier punto, deshacemos todo lo que se haya intentado insertar
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw new Exception("Error durante la importación masiva: " . $e->getMessage());
     }
 
     Logger::registrar($db, $uid, 'IMPORT', 'preguntas', null, ['inserted' => $inserted, 'skipped' => $skipped]);
     echo json_encode(['status' => 'ok', 'insertadas' => $inserted, 'saltados' => $skipped, 'mensaje' => "$inserted preguntas importadas."]);
+    exit;
 }
 
 function getCsvMap($header) {

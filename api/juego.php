@@ -25,56 +25,80 @@ try {
 // --- FUNCIONES ---
 
 function unirsePartida($db, $data) {
-    $pin = $data['pin'] ?? '';
-    // Aseguramos NULL si no está logueado para que no falle la FK de la base de datos
-    $idUsuarioRegistrado = (isset($_SESSION['user_id']) && $_SESSION['user_id'] > 0) ? $_SESSION['user_id'] : null;
+    // 1. LIMPIEZA TOTAL: Quitamos espacios y pasamos a MAYÚSCULAS
+    $pin = strtoupper(trim($data['pin'] ?? ''));
+    $nick = trim($data['nick'] ?? '');
     
+    $idUsuarioRegistrado = (isset($_SESSION['user_id']) && $_SESSION['user_id'] > 0) ? $_SESSION['user_id'] : null;
+    // Iniciamos en 0 para que los invitados (anonimos) tengan que elegir su personaje
+    $avatarId = 0; 
+    $sombreroId = 0;
+
     if ($idUsuarioRegistrado) {
-        $stmtU = $db->prepare("SELECT nick, avatar_id FROM usuarios WHERE id_usuario = ?");
+        $stmtU = $db->prepare("SELECT nick, avatar_id, sombrero_id FROM usuarios WHERE id_usuario = ?");
         $stmtU->execute([$idUsuarioRegistrado]);
         $uProfile = $stmtU->fetch(PDO::FETCH_ASSOC);
-        $nick = !empty($uProfile['nick']) ? $uProfile['nick'] : trim($data['nick'] ?? '');
-        $avatarId = ($uProfile['avatar_id'] > 0) ? $uProfile['avatar_id'] : 0;
-    } else {
-        $nick = trim($data['nick'] ?? '');
-        $avatarId = 0; 
+        if ($uProfile) {
+            $nick = !empty($uProfile['nick']) ? $uProfile['nick'] : $nick;
+            $avatarId = (int)$uProfile['avatar_id'];
+            $sombreroId = (int)($uProfile['sombrero_id'] ?? 0);
+        }
     }
 
     if (empty($nick)) throw new Exception("¡Ups! No puedes jugar sin un apodo.");
+    if (empty($pin)) throw new Exception("Debes introducir un PIN válido.");
     
-    $stmt = $db->prepare("SELECT id_partida, estado FROM partidas WHERE codigo_pin = ? AND estado IN ('sala_espera', 'creada')");
+    // 2. CONSULTA ROBUSTA: Buscamos la partida
+    // IMPORTANTE: Asegúrate de que los estados coincidan exactamente con tu DB
+    $stmt = $db->prepare("SELECT id_partida, estado FROM partidas WHERE UPPER(codigo_pin) = ? AND estado IN ('sala_espera', 'creada')");
     $stmt->execute([$pin]);
     $partida = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$partida) throw new Exception("No encontramos esa partida o ya ha empezado. ¡Llegas tarde!");
+    // DIAGNÓSTICO: Si no se encuentra, verificamos si es por el estado
+    if (!$partida) {
+        // Buscamos la partida sin filtrar por estado para saber el error real
+        $stmtDebug = $db->prepare("SELECT estado FROM partidas WHERE UPPER(codigo_pin) = ?");
+        $stmtDebug->execute([$pin]);
+        $estadoReal = $stmtDebug->fetchColumn();
 
+        if ($estadoReal) {
+            throw new Exception("La partida existe pero está en estado: " . $estadoReal . ". Solo puedes unirte si está en espera.");
+        } else {
+            throw new Exception("No encontramos ninguna partida con el PIN: " . $pin);
+        }
+    }
+
+    // 3. Verificación de Nick Duplicado
     $stmtNick = $db->prepare("SELECT COUNT(*) FROM jugadores_sesion WHERE id_partida = ? AND nombre_nick = ?");
     $stmtNick->execute([$partida['id_partida'], $nick]);
-    if ($stmtNick->fetchColumn() > 0) throw new Exception("Ese nombre ya está pillado. Sé más original.");
+    if ($stmtNick->fetchColumn() > 0) throw new Exception("Ese nombre ya está en esta sala. Elige otro.");
 
     try {
-        $sql = "INSERT INTO jugadores_sesion (id_partida, nombre_nick, avatar_id, ip, id_usuario_registrado) VALUES (?, ?, ?, ?, ?)";
-        $db->prepare($sql)->execute([$partida['id_partida'], $nick, $avatarId, $_SERVER['REMOTE_ADDR'], $idUsuarioRegistrado]);
+        // 4. Inserción (Asegúrate de haber añadido la columna sombrero_id en la tabla jugadores_sesion)
+        $sql = "INSERT INTO jugadores_sesion (id_partida, nombre_nick, avatar_id, sombrero_id, ip, id_usuario_registrado) VALUES (?, ?, ?, ?, ?, ?)";
+        $db->prepare($sql)->execute([$partida['id_partida'], $nick, $avatarId, $sombreroId, $_SERVER['REMOTE_ADDR'], $idUsuarioRegistrado]);
         
         echo json_encode([
             'success' => true, 
             'id_sesion' => $db->lastInsertId(), 
             'id_partida' => $partida['id_partida'],
             'nick' => $nick,
+            'avatar_id' => $avatarId,
+            'sombrero_id' => $sombreroId,
             'has_avatar' => ($avatarId > 0)
         ]);
     } catch (PDOException $e) {
-        // Mensaje comprensible para humanos ante errores de integridad o base de datos
-        throw new Exception("Lo sentimos, hubo un problema al entrar en la partida. Por favor, inténtalo de nuevo.");
+        throw new Exception("Error técnico al entrar. ¿Has añadido la columna sombrero_id a la tabla?");
     }
 }
 
 function seleccionarAvatar($db, $data) {
     $idSesion = $data['id_sesion'];
     $avatarId = (int)$data['avatar_id'];
-    if($avatarId <= 0) throw new Exception("Avatar inválido");
-    $stmt = $db->prepare("UPDATE jugadores_sesion SET avatar_id = ? WHERE id_sesion = ?");
-    $stmt->execute([$avatarId, $idSesion]);
+    $sombreroId = (int)($data['sombrero_id'] ?? 0);
+    
+    $stmt = $db->prepare("UPDATE jugadores_sesion SET avatar_id = ?, sombrero_id = ? WHERE id_sesion = ?");
+    $stmt->execute([$avatarId, $sombreroId, $idSesion]);
     echo json_encode(['success' => true]);
 }
 
@@ -174,7 +198,7 @@ function actualizarFicheroCache($db, $idPartida) {
 
 function obtenerEstado($db, $idSesion) {
     $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
-                   js.puntuacion, js.racha, js.avatar_id,
+                   js.puntuacion, js.racha, js.avatar_id, js.sombrero_id,
                    pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
                    u.nombre as nombre_anfitrion, u.foto_perfil as foto_anfitrion
             FROM jugadores_sesion js
