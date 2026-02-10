@@ -178,7 +178,7 @@ function actualizarFicheroCache($db, $idPartida) {
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if ($data) {
-            // Sincronización de tiempo para la caché: calculamos el tiempo restante real
+            // Sincronización de tiempo
             $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
             if ($data['estado_pregunta'] === 'respondiendo' && !empty($data['tiempo_inicio_pregunta'])) {
                 $inicio = new DateTime($data['tiempo_inicio_pregunta']);
@@ -188,6 +188,17 @@ function actualizarFicheroCache($db, $idPartida) {
                 $data['tiempo_restante'] = ($restante > 0) ? (int)$restante : 0;
             } else {
                 $data['tiempo_restante'] = 0;
+            }
+
+            // --- PROTECCIÓN EXTRA: También ofuscamos el fichero de caché ---
+            if (defined('PROD_MODE') && PROD_MODE === true && $data['estado_pregunta'] === 'respondiendo') {
+                $opciones = json_decode($data['json_opciones'], true);
+                if (is_array($opciones)) {
+                    foreach ($opciones as &$opcion) {
+                        unset($opcion['es_correcta']);
+                    }
+                    $data['json_opciones'] = json_encode($opciones);
+                }
             }
 
             $path = "../temp/partida_" . $data['id_partida'] . ".json";
@@ -232,6 +243,16 @@ function obtenerEstado($db, $idSesion) {
         $data['top_ranking'] = $stmtTop->fetchAll(PDO::FETCH_ASSOC);
     }
     
-    echo json_encode(['success' => true, 'data' => $data]);
+    // --- PROTECCIÓN EXTRA: También ofuscamos el fichero de caché ---
+            // CAMBIA LA LÍNEA 231 POR ESTA:
+    if ($data && defined('PROD_MODE') && PROD_MODE === true && ($data['estado_pregunta'] ?? '') === 'respondiendo') {   
+                $opciones = json_decode($data['json_opciones'], true);
+                if (is_array($opciones)) {
+                    foreach ($opciones as &$opcion) {
+                        unset($opcion['es_correcta']);
+                    }
+                    $data['json_opciones'] = json_encode($opciones);
+                }
+            }
 }
 ?>

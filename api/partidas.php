@@ -52,6 +52,19 @@ function actualizarFicheroEstado($db, $idPartida) {
             }
             if ($data['estado_pregunta'] === 'intro') { $data['json_opciones'] = null; }
 
+            // --- PROTECCIÓN: Ofuscar respuesta correcta ---
+            if ($data && defined('PROD_MODE') && PROD_MODE === true && ($data['estado_pregunta'] ?? '') === 'respondiendo') {
+                $opciones = json_decode($data['json_opciones'], true);
+                if (is_array($opciones)) {
+                    foreach ($opciones as &$opcion) {
+                        unset($opcion['es_correcta']); 
+                    }
+                    $data['json_opciones'] = json_encode($opciones);
+                }
+            }
+
+        if ($data['estado_pregunta'] === 'intro') { $data['json_opciones'] = null; }
+
             $path = "../temp/partida_" . $data['id_partida'] . ".json";
             file_put_contents($path, json_encode(['success' => true, 'data' => $data]));
         }
@@ -328,13 +341,15 @@ function obtenerEstadoJuego($db, $pin) {
             FROM partidas p
             LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
             WHERE p.codigo_pin = ?";
+    
     $stmt = $db->prepare($sql);
     $stmt->execute([$pin]);
     $data = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if ($data) {
         $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
-        // CALCULAMOS EL TIEMPO RESTANTE REAL DESDE EL SERVIDOR
+        
+        // 1. CALCULAMOS EL TIEMPO RESTANTE REAL DESDE EL SERVIDOR
         if ($data['estado_pregunta'] === 'respondiendo' && !empty($data['tiempo_inicio_pregunta'])) {
             $inicio = new DateTime($data['tiempo_inicio_pregunta']);
             $ahora = new DateTime();
@@ -343,6 +358,19 @@ function obtenerEstadoJuego($db, $pin) {
             $data['tiempo_restante'] = $restante > 0 ? (int)$restante : 0;
         } else {
             $data['tiempo_restante'] = 0;
+        }
+
+        // 2. --- PROTECCIÓN: Ofuscar respuesta correcta en modo producción ---
+        // Solo borramos la respuesta si el interruptor PROD_MODE está activo y están respondiendo
+        if (defined('PROD_MODE') && PROD_MODE === true && $data['estado_pregunta'] === 'respondiendo') {
+            $opciones = json_decode($data['json_opciones'], true);
+            if (is_array($opciones)) {
+                foreach ($opciones as &$opcion) {
+                    // Eliminamos el campo que indica si la respuesta es correcta
+                    unset($opcion['es_correcta']); 
+                }
+                $data['json_opciones'] = json_encode($opciones);
+            }
         }
     }
 
