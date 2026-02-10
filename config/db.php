@@ -1,6 +1,34 @@
 <?php
 // config/db.php
 
+// *** Comienzo codigo para minificacion / ofuscacion ***
+
+// INTERRUPTOR GLOBAL: false = Desarrollo, true = Producción
+
+define('PROD_MODE', true); 
+
+/**
+ * Función para cargar la versión minificada (.min.js) si estamos en producción 
+ */
+function get_js_asset($path) {
+    if (defined('PROD_MODE') && PROD_MODE === true) {
+        $minPath = str_replace('.js', '.min.js', $path);
+        
+        // Calculamos la ruta física real sin la carpeta /galiedu/ si ya estás en la raíz
+        $cleanRelative = ltrim(str_replace('../', '', $minPath), '/');
+        // Usamos __DIR__ para que PHP encuentre el archivo esté donde esté la web
+        $fullPath = realpath(__DIR__ . '/../' . $cleanRelative);
+
+        if ($fullPath && file_exists($fullPath)) {
+            return $minPath . '?v=' . filemtime($fullPath);
+        }
+    }
+    return $path;
+}
+
+// *** Fin codigo para minificacion / ofuscacion ***
+
+
 // --- CONFIGURACIÓN DE ERRORES ---
 // Desactivamos el reporte de E_DEPRECATED. 
 // Esto es necesario para que las librerías antiguas (como Dompdf 2.x o versiones no adaptadas a PHP 8.4) 
