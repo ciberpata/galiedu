@@ -1,5 +1,50 @@
 <?php
 // index.php
+
+// 1. Cargamos la configuración
+$settings = require 'config/settings.php';
+
+// 2. Definimos la función de MINIFICACIÓN (Limpieza)
+function minificar_agresivo_seguro($buffer) {
+    if (trim($buffer) === '') return $buffer;
+    $buffer = preg_replace('//', '', $buffer); 
+    $buffer = preg_replace('/[ \t]+/', ' ', $buffer);        
+    $buffer = preg_replace('/^[ \t]+/m', '', $buffer);       
+    $buffer = preg_replace('/[ \t]+$/m', '', $buffer);       
+    $buffer = preg_replace('/[\r\n]+/', "\n", $buffer);      
+    return trim($buffer);
+}
+
+// 3. Definimos la función de OFUSCACIÓN TOTAL (Encriptado visual)
+function ofuscar_html_extremo($buffer) {
+    // Primero minificamos para ahorrar espacio en el cifrado
+    $minified = minificar_agresivo_seguro($buffer);
+    
+    // Si no hay contenido, devolver vacío
+    if (empty($minified)) return '';
+
+    // Codificamos todo el HTML en Base64
+    $encoded = base64_encode($minified);
+
+    // Creamos el script que el navegador ejecutará para "pintar" la web
+    // Usamos UTF-8 decode para respetar tildes y emojis
+    $script = '<script type="text/javascript">';
+    $script .= 'document.open();';
+    $script .= 'document.write(decodeURIComponent(escape(window.atob("' . $encoded . '"))));';
+    $script .= 'document.close();';
+    $script .= '</script>';
+
+    return $script;
+}
+
+// 4. Lógica del interruptor (Configurable desde settings.php)
+if (isset($settings['minify_html']) && $settings['minify_html'] === true) {
+    // CAMBIO IMPORTANTE: Usamos la función extrema en lugar de solo la segura
+    ob_start("ofuscar_html_extremo");
+} else {
+    ob_start();
+}
+
 session_start();
 
 // --- 1. SISTEMA DE RUTAS (ROUTER) ---
@@ -104,6 +149,6 @@ $isCleanView = ($view === 'proyector');
             ?>
         </div>
     </main>
-    <script src="assets/js/app.js"></script>
+    <script src="assets/js/app.min.js?v=<?php echo file_exists('assets/js/app.min.js') ? filemtime('assets/js/app.min.js') : time(); ?>"></script>
 </body>
 </html>
