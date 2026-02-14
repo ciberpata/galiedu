@@ -27,13 +27,14 @@ $urole = $_SESSION['user_role'] ?? 0;
 // --- FUNCIÓN DE OPTIMIZACIÓN (JSON CACHE) ---
 function actualizarFicheroEstado($db, $idPartida) {
     try {
-        $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
-                       pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
-                       u.nombre as nombre_anfitrion
-                FROM partidas p
-                JOIN usuarios u ON p.id_anfitrion = u.id_usuario
-                LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
-                WHERE p.id_partida = ?";
+        $sql = "SELECT p.id_partida, p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.codigo_pin,
+               (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
+               pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
+               u.nombre as nombre_anfitrion
+        FROM partidas p
+        JOIN usuarios u ON p.id_anfitrion = u.id_usuario
+        LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
+        WHERE p.id_partida = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$idPartida]);
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -115,6 +116,17 @@ try {
         case 'ranking_parcial':
             getRankingParcial($db, $input['id_partida'] ?? $_GET['id_partida']);
             break;
+        case 'get_stats_academia':
+            $idAcademia = ($urole == 1 && !empty($input['id_academia'])) ? $input['id_academia'] : $uid;
+            $stmt = $db->prepare("
+                SELECT p.estado, COUNT(*) as total 
+                FROM partidas p
+                JOIN usuarios u ON p.id_anfitrion = u.id_usuario
+                WHERE u.id_usuario = ? OR u.id_padre = ?
+                GROUP BY p.estado");
+            $stmt->execute([$idAcademia, $idAcademia]);
+            echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+            exit;
         case 'get_stats_pregunta':
             $id_partida = $_GET['id_partida'] ?? 0;
             // Obtenemos la pregunta actual de la partida

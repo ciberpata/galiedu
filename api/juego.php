@@ -14,7 +14,11 @@ try {
     switch ($action) {
         case 'unirse': unirsePartida($db, $input); break;
         case 'seleccionar_avatar': seleccionarAvatar($db, $input); break;
-        case 'responder': procesarRespuesta($db, $input); break;
+        case 'responder':
+            // Cargamos el handler del modo Quiz
+            require_once dirname(__DIR__) . '/games/quiz/quiz_handler.php';
+            echo json_encode(quiz_procesar_respuesta($db, $input));
+            break;
         case 'estado_jugador': obtenerEstado($db, $input['id_sesion']); break;
         default: echo json_encode(['error' => 'Acción desconocida']);
     }
@@ -102,67 +106,6 @@ function seleccionarAvatar($db, $data) {
     echo json_encode(['success' => true]);
 }
 
-function procesarRespuesta($db, $data) {
-    $idSesion = $data['id_sesion'];
-    $respuestaJson = json_encode($data['respuesta']); 
-    
-    $sql = "SELECT p.id_partida, p.tiempo_inicio_pregunta, p.estado_pregunta, p.id_anfitrion,
-            pr.id_pregunta, pr.json_opciones, pr.tiempo_limite,
-            js.nombre_nick
-            FROM partidas p
-            JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
-            JOIN jugadores_sesion js ON js.id_sesion = ? AND js.id_partida = p.id_partida
-            WHERE p.id_partida = js.id_partida";
-            
-    $stmt = $db->prepare($sql);
-    $stmt->execute([$idSesion]);
-    $info = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$info || $info['estado_pregunta'] !== 'respondiendo') {
-        echo json_encode(['success' => false, 'error' => 'Tiempo agotado o pregunta cerrada']);
-        return;
-    }
-
-    $opciones = json_decode($info['json_opciones'], true);
-    $esCorrecta = false;
-    $indiceResp = $data['respuesta']['indice'] ?? -1;
-    if (isset($opciones[$indiceResp]) && $opciones[$indiceResp]['es_correcta']) {
-        $esCorrecta = true;
-    }
-
-    $puntosGanados = 0;
-    $stmtRacha = $db->prepare("SELECT racha FROM jugadores_sesion WHERE id_sesion = ?");
-    $stmtRacha->execute([$idSesion]);
-    $rachaActual = $stmtRacha->fetchColumn();
-
-    if ($esCorrecta) {
-        $inicio = new DateTime($info['tiempo_inicio_pregunta']);
-        $ahora = new DateTime();
-        $segundosTranscurridos = ($ahora->getTimestamp() - $inicio->getTimestamp()) + ($ahora->format('u') - $inicio->format('u')) / 1000000;
-        if ($segundosTranscurridos < 0) $segundosTranscurridos = 0;
-        
-        $tLimite = (int)$info['tiempo_limite'];
-        if ($segundosTranscurridos > $tLimite) $segundosTranscurridos = $tLimite;
-
-        $factorTiempo = 1 - ($segundosTranscurridos / $tLimite);
-        $puntosGanados = round(500 + (500 * $factorTiempo));
-        
-        $nuevaRacha = $rachaActual + 1;
-        $bonusRacha = min(($nuevaRacha - 1) * 100, 500); 
-        if ($nuevaRacha > 1) $puntosGanados += $bonusRacha;
-
-        $db->prepare("UPDATE jugadores_sesion SET puntuacion = puntuacion + ?, racha = ? WHERE id_sesion = ?")
-           ->execute([$puntosGanados, $nuevaRacha, $idSesion]);
-    } else {
-        $db->prepare("UPDATE jugadores_sesion SET racha = 0 WHERE id_sesion = ?")->execute([$idSesion]);
-    }
-
-    $db->prepare("INSERT INTO respuestas_log (id_sesion, id_pregunta, respuesta_json, es_correcta, tiempo_tardado) VALUES (?, ?, ?, ?, ?)")
-       ->execute([$idSesion, $info['id_pregunta'], $respuestaJson, $esCorrecta ? 1 : 0, $segundosTranscurridos ?? 0]);
-
-    echo json_encode(['success' => true, 'correcta' => $esCorrecta, 'puntos' => $puntosGanados]);
-}
-
 // Nueva función para forzar el avance del proyector
 function actualizarFicheroCache($db, $idPartida) {
     try {
@@ -207,52 +150,53 @@ function actualizarFicheroCache($db, $idPartida) {
     } catch (Exception $e) {}
 }
 
-function obtenerEstado($db, $idSesion) {
-    $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
-                   js.puntuacion, js.racha, js.avatar_id, js.sombrero_id,
-                   pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
-                   u.nombre as nombre_anfitrion, u.foto_perfil as foto_anfitrion
+    function obtenerEstado($db, $idSesion) {
+        $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
+                (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
+                js.puntuacion, js.racha, js.avatar_id, js.sombrero_id,
+                pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
+                u.nombre as nombre_anfitrion, u.foto_perfil as foto_anfitrion
             FROM jugadores_sesion js
             JOIN partidas p ON js.id_partida = p.id_partida
             JOIN usuarios u ON p.id_anfitrion = u.id_usuario
             LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
             WHERE js.id_sesion = ?";
-            
-    $stmt = $db->prepare($sql);
-    $stmt->execute([$idSesion]);
-    $data = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$idSesion]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$data) { echo json_encode(['error' => 'Sesión no encontrada']); return; }
-    
-    // ASEGURAMOS QUE EL TIEMPO LÍMITE SEA SIEMPRE UN ENTERO PARA EL CONTADOR
-    $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
-    
-    if ($data['estado_pregunta'] === 'respondiendo' && $data['tiempo_inicio_pregunta']) {
-        $inicio = new DateTime($data['tiempo_inicio_pregunta']);
-        $ahora = new DateTime();
-        $diff = $ahora->getTimestamp() - $inicio->getTimestamp();
-        $restante = $data['tiempo_limite'] - $diff;
-        $data['tiempo_restante'] = $restante > 0 ? (int)$restante : 0;
-    } else {
-        $data['tiempo_restante'] = 0;
-    }
+        if (!$data) { echo json_encode(['error' => 'Sesión no encontrada']); return; }
+        
+        $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
+        
+        if ($data['estado_pregunta'] === 'respondiendo' && $data['tiempo_inicio_pregunta']) {
+            $inicio = new DateTime($data['tiempo_inicio_pregunta']);
+            $ahora = new DateTime();
+            $diff = $ahora->getTimestamp() - $inicio->getTimestamp();
+            $restante = $data['tiempo_limite'] - $diff;
+            $data['tiempo_restante'] = $restante > 0 ? (int)$restante : 0;
+        } else {
+            $data['tiempo_restante'] = 0;
+        }
 
-    if ($data['estado'] === 'finalizada') {
-        $stmtTop = $db->prepare("SELECT nombre_nick, puntuacion, avatar_id FROM jugadores_sesion WHERE id_partida = ? AND avatar_id > 0 ORDER BY puntuacion DESC LIMIT 3");
-        $stmtTop->execute([$data['id_partida']]);
-        $data['top_ranking'] = $stmtTop->fetchAll(PDO::FETCH_ASSOC);
-    }
-    
-    // --- PROTECCIÓN EXTRA: También ofuscamos el fichero de caché ---
-            // CAMBIA LA LÍNEA 231 POR ESTA:
-    if ($data && defined('PROD_MODE') && PROD_MODE === true && ($data['estado_pregunta'] ?? '') === 'respondiendo') {   
-                $opciones = json_decode($data['json_opciones'], true);
-                if (is_array($opciones)) {
-                    foreach ($opciones as &$opcion) {
-                        unset($opcion['es_correcta']);
-                    }
-                    $data['json_opciones'] = json_encode($opciones);
+        if ($data['estado'] === 'finalizada') {
+            $stmtTop = $db->prepare("SELECT nombre_nick, puntuacion, avatar_id FROM jugadores_sesion WHERE id_partida = ? AND avatar_id > 0 ORDER BY puntuacion DESC LIMIT 3");
+            $stmtTop->execute([$data['id_partida']]);
+            $data['top_ranking'] = $stmtTop->fetchAll(PDO::FETCH_ASSOC);
+        }
+        
+        if ($data && defined('PROD_MODE') && PROD_MODE === true && ($data['estado_pregunta'] ?? '') === 'respondiendo') {   
+            $opciones = json_decode($data['json_opciones'], true);
+            if (is_array($opciones)) {
+                foreach ($opciones as &$opcion) {
+                    unset($opcion['es_correcta']);
                 }
+                $data['json_opciones'] = json_encode($opciones);
             }
-}
+        }
+
+        // LÍNEA CRÍTICA AÑADIDA:
+        echo json_encode(['success' => true, 'data' => $data]);
+    }
 ?>
