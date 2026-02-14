@@ -8,7 +8,7 @@
 // config/settings.php
 return [
     // Interruptor de minificación (No olvides la coma al final)
-    'minify_html' => true,
+    'minify_html' => false,
 
     // Configuración SMTP
     'smtp' => [
