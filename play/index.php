@@ -247,7 +247,7 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
 
-    <?php include dirname(__DIR__) . '/games/quiz/quiz_player.php'; ?>
+    <div id="game-module-container"></div>
 
     <div class="player-footer" id="playerFooter" style="display:none;">
         <div class="pf-left">
@@ -316,6 +316,38 @@ if (isset($_SESSION['user_id'])) {
 
     // --- 3. LÓGICA ---
 
+    async function loadGameModule(slug) {
+        console.log("Intentando cargar módulo:", slug);
+        try {
+            const container = document.getElementById('game-module-container');
+            if (!container) {
+                console.error("ERROR CRÍTICO: No se encuentra el elemento 'game-module-container' en el HTML.");
+                return;
+            }
+
+            const response = await fetch(`../games/${slug}/player.php`);
+            if (!response.ok) throw new Error("No se pudo obtener el archivo del juego");
+            
+            const html = await response.text();
+            container.innerHTML = html;
+            
+            // Ejecutar scripts del módulo
+            const scripts = container.querySelectorAll('script');
+            scripts.forEach(oldScript => {
+                const newScript = document.createElement('script');
+                if (oldScript.src) {
+                    newScript.src = oldScript.src;
+                } else {
+                    newScript.textContent = oldScript.textContent;
+                }
+                document.head.appendChild(newScript).parentNode.removeChild(newScript);
+            });
+            console.log("Módulo cargado con éxito");
+        } catch (e) { 
+            console.error("Error en loadGameModule:", e); 
+        }
+    }
+
     async function step1Login() {
         // Limpiamos espacios y convertimos a mayúsculas
         const pin = document.getElementById('inputPin').value.trim().toUpperCase();
@@ -336,13 +368,21 @@ if (isset($_SESSION['user_id'])) {
                 gamePartidaId = json.id_partida;
                 document.getElementById('myNickDisplay').innerText = myNick;
                 
+                // 1. ESPERAMOS a que el módulo cargue del todo
+                await loadGameModule(json.slug || 'quiz'); 
+                
                 if (json.has_avatar) {
                     document.getElementById('myAvatarDisplay').innerHTML = AvatarManager.render(json.avatar_id, json.sombrero_id || 0);
                     document.getElementById('playerFooter').style.display = 'flex';
                     showWaitScreen("Ya estás dentro", "Mira la pantalla");
                     startPolling();
                 } else {
-                    initGrids(); // Inicializamos las rejillas dinámicas desde AvatarManager
+                    // 2. Ahora initGrids ya existe porque el await ha terminado
+                    if (typeof initGrids === 'function') {
+                        initGrids(); 
+                    } else {
+                        console.error("La función initGrids no se encontró en el módulo cargado.");
+                    }
                     showScreen('screen-avatar'); 
                 }
             }
@@ -379,25 +419,41 @@ if (isset($_SESSION['user_id'])) {
             
             let gameData = null;
 
-            // 1. Prioridad: Archivo JSON caché (Optimización original)
+            // 1. Intentar cargar el JSON de caché (con redirección manual para evitar bucles del servidor)
             try {
-                const r = await fetch(`../temp/partida_${gamePartidaId}.json?t=${Date.now()}`);
-                if(r.ok) {
+                const r = await fetch(`../temp/partida_${gamePartidaId}.json?t=${Date.now()}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    redirect: 'manual' // <--- EVITA EL BUCLE DE REDIRECCIÓN
+                });
+                
+                // Solo procesamos si el archivo existe de verdad (status 200)
+                if(r.status === 200) {
                     const json = await r.json(); 
                     if(json.success) { gameData = json.data; }
                 }
-            } catch(e) {}
-
-            // 2. Fallback: API directa en momentos clave (resultados)
-            if (!gameData || (gameData.estado_pregunta === 'resultados' && lastPhase !== 'resultados')) {
-                try {
-                    const res = await fetch('../api/juego.php', {method:'POST', body:JSON.stringify({action:'estado_jugador', id_sesion:mySessionId})});
-                    const json = await res.json();
-                    if(json.success) { gameData = json.data; }
-                } catch(e){}
+            } catch(e) {
+                // El archivo no existe o el servidor dio error, pasamos al fallback
             }
 
-            if(gameData) updateUI(gameData);
+            // 2. Fallback: Si el JSON no está listo, consultar la API directamente
+            if (!gameData || (gameData.estado_pregunta === 'resultados' && lastPhase !== 'resultados') || (gameData.estado_pregunta === 'intro' && lastPhase !== 'intro') || (gameData.estado === 'finalizada' && lastPhase !== 'finalizada')) {
+                try {
+                    const res = await fetch('../api/juego.php', {
+                        method: 'POST',
+                        body: JSON.stringify({action: 'estado_jugador', id_sesion: mySessionId})
+                    });
+                    const json = await res.json();
+                    if(json.success) { gameData = json.data; }
+                } catch(e) {
+                    console.error("Error en el fallback de la API:", e);
+                }
+            }
+
+            // 3. Actualizar la interfaz si tenemos datos
+            if(gameData) {
+                updateUI(gameData);
+            }
 
         }, 1500); 
     }
@@ -435,13 +491,16 @@ if (isset($_SESSION['user_id'])) {
             const container = document.getElementById('myAvatarDisplay');
             if (container) {
                 container.innerHTML = AvatarManager.render(data.avatar_id, data.sombrero_id || 0);
+                document.getElementById('playerFooter').style.display = 'flex';
             }
         }
 
         // 2. Delegar la lógica de pantallas al módulo Quiz
         if (data.estado !== 'sala_espera') {
-            // Esta llamada fallaba porque QuizPlayer no se cargaba por el error de sintaxis
-            QuizPlayer.update(data);
+            // Ejecuta el módulo de juego solo si el objeto y su función existen
+            if (typeof GameModule !== 'undefined' && GameModule.update) {
+                GameModule.update(data);
+            }
         } else {
             showWaitScreen(UI_TEXTS[currentLang].wait, UI_TEXTS[currentLang].wait_sub);
         }
