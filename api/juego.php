@@ -15,9 +15,21 @@ try {
         case 'unirse': unirsePartida($db, $input); break;
         case 'seleccionar_avatar': seleccionarAvatar($db, $input); break;
         case 'responder':
-            // Cargamos el handler del modo Quiz
-            require_once dirname(__DIR__) . '/games/quiz/quiz_handler.php';
-            echo json_encode(quiz_procesar_respuesta($db, $input));
+            // 1. Obtener el modo de la partida actual
+            $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = (SELECT id_partida FROM jugadores_sesion WHERE id_sesion = ?)");
+            $stmtM->execute([$input['id_sesion']]);
+            $slug = $stmtM->fetchColumn() ?: 'quiz';
+
+            // 2. Cargar el handler dinámico
+            $handlerPath = dirname(__DIR__) . "/games/{$slug}/handler.php";
+            if (file_exists($handlerPath)) {
+                require_once $handlerPath;
+                // Cada handler debe implementar una función estandarizada: [slug]_procesar_respuesta
+                $funcionHandler = "{$slug}_procesar_respuesta";
+                echo json_encode($funcionHandler($db, $input));
+            } else {
+                echo json_encode(['error' => 'Handler no encontrado']);
+            }
             break;
         case 'estado_jugador': obtenerEstado($db, $input['id_sesion']); break;
         default: echo json_encode(['error' => 'Acción desconocida']);
@@ -54,7 +66,13 @@ function unirsePartida($db, $data) {
     
     // 2. CONSULTA ROBUSTA: Buscamos la partida
     // IMPORTANTE: Asegúrate de que los estados coincidan exactamente con tu DB
-    $stmt = $db->prepare("SELECT id_partida, estado FROM partidas WHERE UPPER(codigo_pin) = ? AND estado IN ('sala_espera', 'creada')");
+    // Obtenemos también el slug del modo de juego
+    $stmt = $db->prepare("
+        SELECT p.id_partida, p.estado, m.slug 
+        FROM partidas p 
+        JOIN modos_juego m ON p.id_modo = m.id_modo 
+        WHERE UPPER(p.codigo_pin) = ? AND p.estado IN ('sala_espera', 'creada')
+    ");
     $stmt->execute([$pin]);
     $partida = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -87,6 +105,7 @@ function unirsePartida($db, $data) {
             'id_sesion' => $db->lastInsertId(), 
             'id_partida' => $partida['id_partida'],
             'nick' => $nick,
+            'slug' => $partida['slug'], // <--- Añadido
             'avatar_id' => $avatarId,
             'sombrero_id' => $sombreroId,
             'has_avatar' => ($avatarId > 0)
@@ -186,13 +205,17 @@ function actualizarFicheroCache($db, $idPartida) {
             $data['top_ranking'] = $stmtTop->fetchAll(PDO::FETCH_ASSOC);
         }
         
-        if ($data && defined('PROD_MODE') && PROD_MODE === true && ($data['estado_pregunta'] ?? '') === 'respondiendo') {   
-            $opciones = json_decode($data['json_opciones'], true);
-            if (is_array($opciones)) {
-                foreach ($opciones as &$opcion) {
-                    unset($opcion['es_correcta']);
-                }
-                $data['json_opciones'] = json_encode($opciones);
+        // Delegamos el enriquecimiento del estado del jugador al handler del modo
+        $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
+        $stmtM->execute([$data['id_partida']]);
+        $slug = $stmtM->fetchColumn() ?: 'quiz';
+
+        $handlerPath = "../games/{$slug}/handler.php";
+        if (file_exists($handlerPath)) {
+            require_once $handlerPath;
+            $funcionEnriquecer = "{$slug}_enriquecer_estado_jugador";
+            if (function_exists($funcionEnriquecer)) {
+                $data = $funcionEnriquecer($db, $data);
             }
         }
 
