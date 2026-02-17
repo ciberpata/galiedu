@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: localhost:3306
--- Tiempo de generación: 14-02-2026 a las 13:33:21
+-- Tiempo de generación: 17-02-2026 a las 11:54:26
 -- Versión del servidor: 11.4.5-MariaDB-cll-lve
 -- Versión de PHP: 8.4.14
 
@@ -317,7 +317,60 @@ INSERT INTO `auditoria` (`id_log`, `id_usuario`, `accion`, `entidad`, `id_afecta
 (272, 68, 'INSERT', 'partidas', 56, '{\"nombre\":\"p14\"}', '85.85.128.242', '2026-02-13 21:47:47'),
 (273, 68, 'UPDATE', 'partidas', 56, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-13 21:47:51'),
 (274, 68, 'UPDATE', 'partidas', 56, '{\"action\":\"iniciar\"}', '85.85.128.242', '2026-02-13 21:48:16'),
-(275, 68, 'UPDATE', 'partidas', 56, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-13 21:49:00');
+(275, 68, 'UPDATE', 'partidas', 56, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-13 21:49:00'),
+(276, 1002, 'LOGIN', 'sesion', 1002, NULL, '85.85.128.242', '2026-02-14 13:39:01'),
+(277, 68, 'LOGIN', 'sesion', 68, NULL, '83.34.134.12', '2026-02-14 22:53:51'),
+(278, 68, 'INSERT', 'partidas', 58, '{\"nombre\":\"p50\"}', '83.34.134.12', '2026-02-14 22:54:13'),
+(279, 68, 'UPDATE', 'partidas', 58, '{\"estado\":\"sala_espera\"}', '83.34.134.12', '2026-02-14 22:54:20'),
+(280, 68, 'UPDATE', 'partidas', 58, '{\"estado\":\"finalizada\"}', '83.34.134.12', '2026-02-14 23:17:04'),
+(281, 68, 'DELETE', 'partidas', 58, NULL, '83.34.134.12', '2026-02-14 23:17:14'),
+(282, 68, 'INSERT', 'partidas', 59, '{\"nombre\":\"p51\"}', '83.34.134.12', '2026-02-14 23:17:36'),
+(283, 68, 'UPDATE', 'partidas', 59, '{\"estado\":\"sala_espera\"}', '83.34.134.12', '2026-02-14 23:17:39'),
+(284, 68, 'UPDATE', 'partidas', 59, '{\"estado\":\"finalizada\"}', '83.34.134.12', '2026-02-14 23:18:53'),
+(285, 68, 'LOGIN', 'sesion', 68, NULL, '85.85.128.242', '2026-02-15 12:21:47'),
+(286, 68, 'DELETE', 'partidas', 59, NULL, '85.85.128.242', '2026-02-15 12:22:35'),
+(287, 68, 'DELETE', 'partidas', 56, NULL, '85.85.128.242', '2026-02-15 12:23:06'),
+(288, 68, 'DELETE', 'partidas', 50, NULL, '85.85.128.242', '2026-02-15 12:23:36'),
+(289, 68, 'INSERT', 'partidas', 60, '{\"nombre\":\"juan\"}', '85.85.128.242', '2026-02-15 12:24:09'),
+(290, 68, 'UPDATE', 'partidas', 60, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-15 12:24:25'),
+(291, 68, 'UPDATE', 'partidas', 60, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-15 12:25:56'),
+(292, 68, 'INSERT', 'partidas', 61, '{\"nombre\":\"p200\"}', '85.85.128.242', '2026-02-15 14:50:41'),
+(293, 68, 'UPDATE', 'partidas', 61, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-15 14:51:23'),
+(294, 68, 'UPDATE', 'partidas', 61, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-15 14:53:00'),
+(295, 68, 'INSERT', 'partidas', 62, '{\"nombre\":\"p101\"}', '85.85.128.242', '2026-02-15 15:04:04'),
+(296, 68, 'UPDATE', 'partidas', 62, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-15 15:04:31'),
+(297, 68, 'UPDATE', 'partidas', 62, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-15 15:06:08'),
+(298, 68, 'INSERT', 'partidas', 63, '{\"nombre\":\"95\"}', '85.85.128.242', '2026-02-16 11:10:19'),
+(299, 68, 'UPDATE', 'partidas', 63, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 11:10:23'),
+(300, 68, 'UPDATE', 'partidas', 63, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 11:17:29'),
+(301, 68, 'INSERT', 'partidas', 64, '{\"nombre\":\"ww\"}', '85.85.128.242', '2026-02-16 11:28:55'),
+(302, 68, 'UPDATE', 'partidas', 64, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 11:28:59'),
+(303, 68, 'UPDATE', 'partidas', 64, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 13:18:56'),
+(304, 68, 'DELETE', 'partidas', 64, NULL, '85.85.128.242', '2026-02-16 13:22:19'),
+(305, 68, 'INSERT', 'partidas', 65, '{\"nombre\":\"eedfd\"}', '85.85.128.242', '2026-02-16 13:22:30'),
+(306, 68, 'UPDATE', 'partidas', 65, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 13:22:34'),
+(307, 68, 'UPDATE', 'partidas', 65, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 13:23:40'),
+(308, 68, 'INSERT', 'partidas', 66, '{\"nombre\":\"2\"}', '85.85.128.242', '2026-02-16 13:55:10'),
+(309, 68, 'UPDATE', 'partidas', 66, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 13:55:17'),
+(310, 68, 'UPDATE', 'partidas', 66, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 13:56:48'),
+(311, 68, 'DELETE', 'partidas', 66, NULL, '85.85.128.242', '2026-02-16 13:58:04'),
+(312, 68, 'DELETE', 'partidas', 65, NULL, '85.85.128.242', '2026-02-16 13:58:06'),
+(313, 68, 'DELETE', 'partidas', 63, NULL, '85.85.128.242', '2026-02-16 13:58:20'),
+(314, 68, 'DELETE', 'partidas', 62, NULL, '85.85.128.242', '2026-02-16 14:00:47'),
+(315, 68, 'DELETE', 'partidas', 61, NULL, '85.85.128.242', '2026-02-16 14:00:50'),
+(316, 68, 'INSERT', 'partidas', 67, '{\"nombre\":\"334\"}', '85.85.128.242', '2026-02-16 14:01:21'),
+(317, 68, 'UPDATE', 'partidas', 67, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 14:01:25'),
+(318, 68, 'UPDATE', 'partidas', 67, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 14:02:57'),
+(319, 68, 'DELETE', 'partidas', 67, NULL, '85.85.128.242', '2026-02-16 17:48:13'),
+(320, 68, 'DELETE', 'partidas', 60, NULL, '85.85.128.242', '2026-02-16 17:48:16'),
+(321, 68, 'INSERT', 'partidas', 68, '{\"nombre\":\"ktki\"}', '85.85.128.242', '2026-02-16 17:49:23'),
+(322, 68, 'UPDATE', 'partidas', 68, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 17:49:29'),
+(323, 68, 'UPDATE', 'partidas', 68, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 17:50:40'),
+(324, 68, 'LOGIN', 'sesion', 68, NULL, '85.85.128.242', '2026-02-16 18:06:12'),
+(325, 1008, 'LOGIN', 'sesion', 1008, NULL, '85.85.128.242', '2026-02-16 18:06:24'),
+(326, 68, 'INSERT', 'partidas', 69, '{\"nombre\":\"ww\"}', '85.85.128.242', '2026-02-16 18:07:11'),
+(327, 68, 'UPDATE', 'partidas', 69, '{\"estado\":\"sala_espera\"}', '85.85.128.242', '2026-02-16 18:07:18'),
+(328, 68, 'UPDATE', 'partidas', 69, '{\"estado\":\"finalizada\"}', '85.85.128.242', '2026-02-16 19:00:44');
 
 -- --------------------------------------------------------
 
@@ -8852,8 +8905,15 @@ INSERT INTO `jugadores_sesion` (`id_sesion`, `id_partida`, `nombre_nick`, `id_us
 (79, 49, 'LAKD', NULL, 0, 0, 1, 0, 0, '2026-02-13 21:08:06', '85.85.128.242'),
 (80, 49, 'faf', NULL, 0, 0, 1, 0, 0, '2026-02-13 21:31:50', '85.85.128.242'),
 (81, 49, 'dffd', NULL, 0, 0, 1, 6, 1, '2026-02-13 21:34:55', '85.85.128.242'),
-(82, 50, 'kdfkf', NULL, 1445, 2, 1, 10, 1, '2026-02-13 21:40:10', '85.85.128.242'),
-(91, 56, 'ddf', NULL, 0, 0, 1, 11, 3, '2026-02-13 22:48:07', '85.85.128.242');
+(92, 57, 'Pepe Prueba', NULL, 0, 0, 1, 0, 0, '2026-02-14 23:03:26', '83.34.134.12'),
+(93, 57, 'potamo', NULL, 0, 0, 1, 0, 0, '2026-02-14 23:17:35', '83.34.134.12'),
+(94, 57, 'poeo', NULL, 0, 0, 1, 0, 0, '2026-02-14 23:18:41', '83.34.134.12'),
+(95, 57, 'ppw', NULL, 0, 0, 1, 0, 0, '2026-02-14 23:21:04', '83.34.134.12'),
+(96, 57, '12kw', NULL, 0, 0, 1, 3, 2, '2026-02-14 23:25:16', '83.34.134.12'),
+(97, 57, 'pepe', NULL, 0, 0, 1, 11, 1, '2026-02-14 23:29:04', '83.34.134.12'),
+(98, 57, '5W5W', NULL, 0, 0, 1, 6, 0, '2026-02-14 23:31:37', '83.34.134.12'),
+(99, 57, 'JORL', NULL, 0, 0, 1, 15, 2, '2026-02-14 23:38:08', '83.34.134.12'),
+(111, 68, 'w', NULL, 550, 1, 1, 14, 0, '2026-02-16 18:49:38', '85.85.128.242');
 
 -- --------------------------------------------------------
 
@@ -8864,18 +8924,19 @@ INSERT INTO `jugadores_sesion` (`id_sesion`, `id_partida`, `nombre_nick`, `id_us
 CREATE TABLE `modos_juego` (
   `id_modo` int(11) NOT NULL,
   `clave` varchar(50) NOT NULL COMMENT 'quiz, survival, team, poll',
-  `nombre` varchar(100) DEFAULT NULL
+  `nombre` varchar(100) DEFAULT NULL,
+  `slug` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 
 --
 -- Volcado de datos para la tabla `modos_juego`
 --
 
-INSERT INTO `modos_juego` (`id_modo`, `clave`, `nombre`) VALUES
-(1, 'quiz', 'Modo Quiz Clásico'),
-(2, 'survival', 'Supervivencia'),
-(3, 'team', 'Por Equipos'),
-(4, 'poll', 'Encuesta');
+INSERT INTO `modos_juego` (`id_modo`, `clave`, `nombre`, `slug`) VALUES
+(1, 'quiz', 'Modo Quiz Clásico', 'quiz'),
+(2, 'survival', 'Supervivencia', NULL),
+(3, 'team', 'Por Equipos', NULL),
+(4, 'poll', 'Encuesta', NULL);
 
 -- --------------------------------------------------------
 
@@ -9198,8 +9259,9 @@ INSERT INTO `partidas` (`id_partida`, `codigo_pin`, `id_anfitrion`, `id_modo`, `
 (45, '406794', 68, 1, '99999', 'finalizada', 2, 'resultados', '2026-02-03 19:24:48', 39, NULL, NULL, 0, 0),
 (48, '537482', 68, 1, 'p10', 'finalizada', 2, 'resultados', '2026-02-13 20:52:18', 39, NULL, NULL, 0, 0),
 (49, '139647', 68, 1, 'p11', 'finalizada', 2, 'respondiendo', '2026-02-13 21:06:54', 38, '2026-02-13 21:38:55', NULL, 0, 0),
-(50, '671119', 68, 1, 'p13', 'finalizada', 2, 'resultados', '2026-02-13 21:39:33', 33, NULL, NULL, 0, 0),
-(56, '160222', 68, 1, 'p14', 'finalizada', 2, 'resultados', '2026-02-13 22:47:47', 38, NULL, NULL, 0, 0);
+(57, '123456', 1, 1, 'Partida de Prueba Modular', 'sala_espera', 0, 'intro', '2026-02-14 22:55:25', NULL, NULL, NULL, 0, 0),
+(68, '523372', 68, 1, 'ktki', 'finalizada', 1, 'resultados', '2026-02-16 18:49:23', 40, NULL, NULL, 0, 0),
+(69, '184185', 68, 1, 'ww', 'finalizada', 0, 'resultados', '2026-02-16 19:07:11', 22, NULL, NULL, 0, 0);
 
 -- --------------------------------------------------------
 
@@ -9312,10 +9374,11 @@ INSERT INTO `partida_preguntas` (`id_pp`, `id_partida`, `id_pregunta`, `orden`) 
 (123, 48, 39, 2),
 (124, 49, 40, 1),
 (125, 49, 38, 2),
-(126, 50, 40, 1),
-(127, 50, 33, 2),
-(138, 56, 40, 1),
-(139, 56, 38, 2);
+(140, 57, 1, 1),
+(161, 68, 40, 1),
+(162, 68, 33, 2),
+(163, 69, 22, 1),
+(164, 69, 23, 2);
 
 -- --------------------------------------------------------
 
@@ -9654,9 +9717,7 @@ INSERT INTO `respuestas_log` (`id_resp`, `id_sesion`, `id_pregunta`, `respuesta_
 (116, 72, 39, '{\"indice\":1}', 0, 0),
 (117, 77, 40, '{\"indice\":0}', 1, 8.27257),
 (118, 77, 39, '{\"indice\":2}', 1, 6.44957),
-(119, 82, 40, '{\"indice\":0}', 1, 7.76133),
-(120, 82, 33, '{\"indice\":0}', 1, 15),
-(124, 91, 38, '{\"indice\":0}', 0, 0);
+(137, 111, 40, '{\"indice\":0}', 1, 22.4885);
 
 -- --------------------------------------------------------
 
@@ -9887,7 +9948,7 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT de la tabla `auditoria`
 --
 ALTER TABLE `auditoria`
-  MODIFY `id_log` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=276;
+  MODIFY `id_log` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=329;
 
 --
 -- AUTO_INCREMENT de la tabla `ciudades`
@@ -9917,7 +9978,7 @@ ALTER TABLE `historial_partidas`
 -- AUTO_INCREMENT de la tabla `jugadores_sesion`
 --
 ALTER TABLE `jugadores_sesion`
-  MODIFY `id_sesion` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=92;
+  MODIFY `id_sesion` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=113;
 
 --
 -- AUTO_INCREMENT de la tabla `modos_juego`
@@ -9929,13 +9990,13 @@ ALTER TABLE `modos_juego`
 -- AUTO_INCREMENT de la tabla `partidas`
 --
 ALTER TABLE `partidas`
-  MODIFY `id_partida` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
+  MODIFY `id_partida` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=70;
 
 --
 -- AUTO_INCREMENT de la tabla `partida_preguntas`
 --
 ALTER TABLE `partida_preguntas`
-  MODIFY `id_pp` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=140;
+  MODIFY `id_pp` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=165;
 
 --
 -- AUTO_INCREMENT de la tabla `planes`
@@ -9965,7 +10026,7 @@ ALTER TABLE `provincias`
 -- AUTO_INCREMENT de la tabla `respuestas_log`
 --
 ALTER TABLE `respuestas_log`
-  MODIFY `id_resp` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=125;
+  MODIFY `id_resp` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=138;
 
 --
 -- AUTO_INCREMENT de la tabla `roles`
