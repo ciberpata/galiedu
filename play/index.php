@@ -366,6 +366,14 @@ if (isset($_SESSION['user_id'])) {
             if(json.success) { 
                 mySessionId = json.id_sesion; 
                 gamePartidaId = json.id_partida;
+                myNick = json.nick;
+
+                // GUARDAR PARA RECONEXIÓN (Punto 5)
+                localStorage.setItem('galiedu_session', mySessionId);
+                localStorage.setItem('galiedu_partida', gamePartidaId);
+                localStorage.setItem('galiedu_slug', json.slug);
+                localStorage.setItem('galiedu_nick', myNick);
+
                 document.getElementById('myNickDisplay').innerText = myNick;
                 
                 // 1. ESPERAMOS a que el módulo cargue del todo
@@ -505,8 +513,87 @@ if (isset($_SESSION['user_id'])) {
             showWaitScreen(UI_TEXTS[currentLang].wait, UI_TEXTS[currentLang].wait_sub);
         }
 
+        // Limpieza de datos de sesión si la partida ha finalizado (Punto 5)
+        if (data.estado === 'finalizada') {
+            localStorage.removeItem('galiedu_session');
+            localStorage.removeItem('galiedu_partida');
+            localStorage.removeItem('galiedu_slug');
+            localStorage.removeItem('galiedu_nick');
+            if (window.timerInterval) clearInterval(window.timerInterval);
+        }
+
         lastPhase = data.estado_pregunta || data.estado; 
     }
+
+    // Funciones globales de personalización (Movidas al Shell para asegurar disponibilidad)
+    function initGrids() {
+        const aGrid = document.getElementById('avatarList'); 
+        if(aGrid) {
+            aGrid.innerHTML = '';
+            Object.entries(AvatarManager.baseAvatars).forEach(([id, icon]) => {
+                aGrid.innerHTML += `<div class="avatar-card" onclick="selectAvatar(${id}, '${icon}', this)">${icon}</div>`;
+            });
+        }
+        const hGrid = document.getElementById('hatList'); 
+        if(hGrid) {
+            hGrid.innerHTML = '';
+            Object.entries(AvatarManager.hats).forEach(([id, icon]) => {
+                hGrid.innerHTML += `<div class="avatar-card" onclick="selectHat(${id}, '${icon}', this)">${icon || '❌'}</div>`;
+            });
+        }
+    }
+
+    function selectAvatar(id, icon, el) {
+        tempAvatarId = id; 
+        const preview = document.getElementById('previewAvatar');
+        if(preview) preview.innerText = icon;
+        document.querySelectorAll('#avatarList .avatar-card').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+
+    function selectHat(id, icon, el) {
+        tempHatId = id; 
+        const hatEl = document.getElementById('previewHat');
+        if(hatEl) {
+            hatEl.innerText = icon; 
+            hatEl.classList.remove('animating'); 
+            void hatEl.offsetWidth; 
+            if(id > 0) hatEl.classList.add('animating');
+        }
+        document.querySelectorAll('#hatList .avatar-card').forEach(c => c.classList.remove('selected'));
+        el.classList.add('selected');
+    }
+
+    function toggleAvatarStep(step) {
+        document.getElementById('step-avatar-list').style.display = (step === 1) ? 'block' : 'none';
+        document.getElementById('step-hat-list').style.display = (step === 2) ? 'block' : 'none';
+        document.getElementById('btnNext').style.display = (step === 1) ? 'block' : 'none';
+        document.getElementById('btnPrev').style.display = (step === 2) ? 'block' : 'none';
+        document.getElementById('btnConfirmAvatar').style.display = (step === 2) ? 'block' : 'none';
+    }
+
+    // RECONEXIÓN AUTOMÁTICA AL CARGAR LA PÁGINA
+    window.addEventListener('load', async () => {
+        const savedSession = localStorage.getItem('galiedu_session');
+        const savedPartida = localStorage.getItem('galiedu_partida');
+        const savedSlug = localStorage.getItem('galiedu_slug');
+        const savedNick = localStorage.getItem('galiedu_nick');
+
+        if (savedSession && savedPartida && savedSlug) {
+            console.log("Reconectando sesión...");
+            mySessionId = savedSession;
+            gamePartidaId = savedPartida;
+            myNick = savedNick;
+
+            // Ocultamos login y configuramos interfaz
+            document.getElementById('screen-login').classList.remove('active');
+            document.getElementById('myNickDisplay').innerText = myNick;
+
+            // Cargamos el módulo y empezamos a sincronizar
+            await loadGameModule(savedSlug);
+            startPolling();
+        }
+    });
 </script>
 </body>
 </html>
