@@ -119,6 +119,7 @@ if ($role == 1) { // Superadmin
     $activeGames = $stmt->fetchColumn();
 }
 
+// PON ESTO EN SU LUGAR:
 // DATOS PARA GRÁFICOS
 $chartLabels = [];
 $chartData = [];
@@ -126,10 +127,19 @@ $chartTypeLabels = [];
 $chartTypeData = [];
 
 if ($role != 6) {
-    $whereUser = ($role == 1) ? "1=1" : "id_anfitrion = $uid"; 
-    $sqlDate = "SELECT DATE(fecha_inicio) as fecha, COUNT(*) as total FROM partidas 
-                WHERE $whereUser AND fecha_inicio >= DATE(NOW()) - INTERVAL 7 DAY 
-                GROUP BY DATE(fecha_inicio) ORDER BY fecha ASC";
+    if ($role == 1) {
+        $whereUser = "1=1";
+    } elseif ($role == 2) {
+        $whereUser = "(p.id_creador = $uid OR p.id_anfitrion = $uid OR p.id_anfitrion IN (SELECT id_usuario FROM usuarios WHERE id_padre = $uid))";
+    } else {
+        $whereUser = "(p.id_anfitrion = $uid OR p.id_creador = $uid)";
+    }
+
+    $sqlDate = "SELECT DATE(p.fecha_inicio) as fecha, COUNT(*) as total 
+                FROM partidas p 
+                WHERE $whereUser AND p.fecha_inicio >= DATE(NOW()) - INTERVAL 7 DAY 
+                GROUP BY DATE(p.fecha_inicio) ORDER BY fecha ASC";
+    
     $resDate = $db->query($sqlDate)->fetchAll(PDO::FETCH_ASSOC);
     foreach($resDate as $r) {
         $chartLabels[] = date('d/m', strtotime($r['fecha']));
@@ -145,11 +155,12 @@ if ($role != 6) {
         $chartTypeData[] = $r['total'];
     }
 } else {
-    $sqlProgress = "SELECT DATE(ultima_conexion) as f, SUM(puntuacion) as total 
-                    FROM jugadores_sesion 
-                    WHERE id_usuario_registrado = $uid 
-                    AND ultima_conexion >= DATE(NOW()) - INTERVAL 7 DAY 
-                    GROUP BY DATE(ultima_conexion) 
+    $sqlProgress = "SELECT DATE(p.fecha_inicio) as f, SUM(js.puntuacion) as total 
+                    FROM jugadores_sesion js
+                    JOIN partidas p ON js.id_partida = p.id_partida
+                    WHERE js.id_usuario_registrado = $uid 
+                    AND p.fecha_inicio >= DATE(NOW()) - INTERVAL 7 DAY 
+                    GROUP BY DATE(p.fecha_inicio) 
                     ORDER BY f ASC";
     $resProgress = $db->query($sqlProgress)->fetchAll(PDO::FETCH_ASSOC);
     

@@ -22,9 +22,8 @@ $isStudent = ($role == 6); // Definir si es alumno
                 </div>
                 <div>
                     <label class="block text-muted mb-2"><?php echo __('game_form_mode'); ?></label>
-                    <select name="id_modo" class="form-control">
-                        <option value="1"><?php echo __('game_mode_quiz'); ?></option>
-                    </select>
+                    <select name="id_modo" id="gameModeSelect" class="form-control">
+                        </select>
                 </div>
             </div>
 
@@ -194,9 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGames();
     if(!isStudent) {
         loadAllQuestionsForBuilder(); 
+        loadGameModes(); // <--- IMPORTANTE: Llamar a la función
         if(isSuperAdmin || isAcademy) loadUsersForSelects();
     }
-    
+
     // Auto-refresco
     setInterval(() => {
         if(!document.getElementById('pSearch').value) loadGames(true);
@@ -239,6 +239,34 @@ function applyGameQuick(type, btn) {
     loadGames();
 }
 
+async function loadGameModes() {
+    try {
+        const res = await fetch('api/herramientas.php', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ action: 'get_modos' })
+        });
+        
+        // Verificamos si la respuesta es correcta antes de parsear el JSON
+        if (!res.ok) throw new Error('Error en la respuesta del servidor');
+        
+        const json = await res.json();
+        const selMode = document.getElementById('gameModeSelect');
+        
+        if(json.success && selMode) {
+            selMode.innerHTML = json.data.map(m => 
+                `<option value="${m.id_modo}">${m.nombre}</option>`
+            ).join('');
+        }
+    } catch(e) { 
+        console.error("Error cargando modos:", e); 
+    }
+}
+
+
 // Carga de Partidas (Renderizado de Tarjetas)
 async function loadGames(isAutoRefresh = false) {
     const grid = document.getElementById('gamesGrid');
@@ -270,7 +298,18 @@ async function loadGames(isAutoRefresh = false) {
             else if(p.estado === 'jugando') { displayState = 'Jugando'; statusClass = 'st-jugando'; }
             else if(p.estado === 'finalizada') { displayState = LANG_FINISHED; statusClass = 'st-finalizada'; }
 
-            // Lógica de botones según rol
+            // Lógica para etiquetas informativas
+            let badgeAsignacion = '';
+            if (p.id_anfitrion != p.id_creador) {
+                if (currentUserId == p.id_anfitrion) {
+                    badgeAsignacion = `<span class="badge" style="background:#e0e7ff; color:#4338ca; font-size:0.7rem; padding: 2px 8px; border-radius: 10px;">Asignada por: ${p.nombre_creador}</span>`;
+                } else {
+                    badgeAsignacion = `<span class="badge" style="background:#fef3c7; color:#92400e; font-size:0.7rem; padding: 2px 8px; border-radius: 10px;">Para: ${p.nombre_anfitrion}</span>`;
+                }
+            } else {
+                badgeAsignacion = `<span class="badge" style="background:#f1f5f9; color:#475569; font-size:0.7rem; padding: 2px 8px; border-radius: 10px;">Propia</span>`;
+            }
+
             if (!isStudent) {
                 if(p.estado === 'finalizada') {
                     btnAction = `<button class="btn-icon" disabled style="opacity:0.5; cursor:default;"><i class="fa-solid fa-flag-checkered"></i></button>`;
@@ -280,13 +319,11 @@ async function loadGames(isAutoRefresh = false) {
                     btnAction = `<button class="btn-primary" onclick="launchGame(${p.id_partida}, '${p.codigo_pin}')" title="${LANG_LAUNCH}"><i class="fa-solid fa-rocket"></i></button>`;
                 }
             } else {
-                // Para alumnos, quizás solo ver info o nada en btnAction
                 btnAction = `<span style="font-size:0.8rem; color:var(--text-muted);">${displayState}</span>`;
             }
 
             const fecha = new Date(p.fecha_inicio).toLocaleDateString();
             
-            // Botones secundarios (Eliminar solo si no es alumno)
             let secondaryBtns = `<button class="btn-icon" onclick="viewPlayers(${p.id_partida})" title="${LANG_PLAYERS_TITLE}"><i class="fa-solid fa-users"></i></button>`;
             if (!isStudent) {
                 secondaryBtns += `<button class="btn-icon text-danger" onclick="deleteGame(${p.id_partida})"><i class="fa-solid fa-trash"></i></button>`;
@@ -297,13 +334,15 @@ async function loadGames(isAutoRefresh = false) {
                 <div class="card-actions">
                     ${secondaryBtns}
                 </div>
-                <span class="status-badge ${statusClass}">${displayState}</span>
-                <h3 style="margin:10px 0 5px; color:var(--primary); font-size:1.1rem;">${p.nombre_partida}</h3>
+                <div style="display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap; align-items:center;">
+                    <span class="status-badge ${statusClass}">${displayState}</span>
+                    ${badgeAsignacion}
+                </div>
+                <h3 style="margin:5px 0 5px; color:var(--primary); font-size:1.1rem;">${p.nombre_partida}</h3>
                 <div class="pin-display">PIN: ${p.codigo_pin}</div>
                 <div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">
                     <div><i class="fa-solid fa-calendar"></i> ${fecha}</div>
                     <div><i class="fa-solid fa-list-ol"></i> ${p.total_preguntas} Pregs | <i class="fa-solid fa-user"></i> ${p.total_jugadores} Jugs</div>
-                    <div style="font-size:0.8rem; margin-top:2px;">Creado por: ${p.nombre_creador}</div>
                 </div>
                 <div class="card-footer-action">${btnAction}</div>
             </div>`;
@@ -471,6 +510,7 @@ async function loadUsersForSelects() {
         if(selTarget) selTarget.innerHTML = opts;
     } catch(e) {}
 }
+
 async function launchGame(idPartida, pin) {
     if(!confirm(LANG_CONFIRM_LAUNCH)) return;
     await fetch('api/partidas.php', { method: 'POST', body: JSON.stringify({ action: 'abrir_sala', id_partida: idPartida }) });
