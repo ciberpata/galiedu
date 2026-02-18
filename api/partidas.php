@@ -65,7 +65,9 @@
     try {
         switch ($action) {
             case 'crear':
-                crearPartida($db, ($urole == 1 && !empty($input['target_user_id'])) ? $input['target_user_id'] : $uid, $input);
+                // Permitimos que SuperAdmin (1) y Academia (2) asignen a otros
+                $targetId = (($urole == 1 || $urole == 2) && !empty($input['target_user_id'])) ? $input['target_user_id'] : $uid;
+                crearPartida($db, $targetId, $input, $uid); 
                 break;
             case 'listar':
                 listarPartidas($db, $uid, $urole);
@@ -200,24 +202,31 @@
         return $pin;
     }
 
-    function crearPartida($db, $anfitrionId, $data) {
+    function crearPartida($db, $anfitrionId, $data, $creadorId) {
         if (empty($data['nombre']) || empty($data['preguntas_ids'])) throw new Exception("Faltan datos.");
         
         $db->beginTransaction();
         try {
             $pin = generarPinUnico($db);
-            $sql = "INSERT INTO partidas (codigo_pin, id_anfitrion, id_modo, nombre_partida, estado) VALUES (?, ?, ?, ?, 'creada')";
+            // 5 tokens para 5 columnas: pin, anfitrion, creador, modo, nombre
+            $sql = "INSERT INTO partidas (codigo_pin, id_anfitrion, id_creador, id_modo, nombre_partida, estado) VALUES (?, ?, ?, ?, ?, 'creada')";
             $stmt = $db->prepare($sql);
-            $stmt->execute([$pin, $anfitrionId, $data['id_modo'] ?? 1, $data['nombre']]); 
-            $idPartida = $db->lastInsertId();
+            $stmt->execute([
+                $pin, 
+                $anfitrionId, 
+                $creadorId, 
+                $data['id_modo'] ?? 1, 
+                $data['nombre']
+            ]); 
             
+            $idPartida = $db->lastInsertId();
             $sqlPreg = "INSERT INTO partida_preguntas (id_partida, id_pregunta, orden) VALUES (?, ?, ?)";
             $stmtPreg = $db->prepare($sqlPreg);
             foreach ($data['preguntas_ids'] as $index => $idPregunta) {
                 $stmtPreg->execute([$idPartida, $idPregunta, $index + 1]); 
             }
             $db->commit();
-            Logger::registrar($db, $anfitrionId, 'INSERT', 'partidas', $idPartida, ['nombre' => $data['nombre']]);
+            Logger::registrar($db, $creadorId, 'INSERT', 'partidas', $idPartida, ['nombre' => $data['nombre']]);
             echo json_encode(['success' => true, 'pin' => $pin, 'id_partida' => $idPartida]);
         } catch (Exception $e) {
             $db->rollBack();
@@ -234,12 +243,15 @@
         // NUEVO: Filtro por número de jugadores
         $minPlayers = (int)($_GET['min_players'] ?? 0);
 
-        $sql = "SELECT p.*, m.nombre as nombre_modo, u.nombre as nombre_creador,
+        $sql = "SELECT p.*, m.nombre as nombre_modo, 
+                u_anf.nombre as nombre_anfitrion,
+                u_crea.nombre as nombre_creador,
                 (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
                 (SELECT COUNT(*) FROM jugadores_sesion WHERE id_partida = p.id_partida AND avatar_id > 0) as total_jugadores
                 FROM partidas p
                 LEFT JOIN modos_juego m ON p.id_modo = m.id_modo
-                LEFT JOIN usuarios u ON p.id_anfitrion = u.id_usuario
+                LEFT JOIN usuarios u_anf ON p.id_anfitrion = u_anf.id_usuario
+                LEFT JOIN usuarios u_crea ON p.id_creador = u_crea.id_usuario
                 WHERE 1=1";
                 
         $params = [];
@@ -309,13 +321,26 @@
 
     function borrarPartida($db, $uid, $role, $idPartida) {
         $idPartida = (int)$idPartida;
-        $sqlCheck = "SELECT id_anfitrion FROM partidas WHERE id_partida = ?";
+        // Obtenemos tanto el anfitrión como el creador para validar permisos
+        $sqlCheck = "SELECT id_anfitrion, id_creador FROM partidas WHERE id_partida = ?";
         $stmt = $db->prepare($sqlCheck);
         $stmt->execute([$idPartida]);
-        $owner = $stmt->fetchColumn();
+        $game = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        if (!$owner) { echo json_encode(['success' => true]); return; }
-        if ($role != 1 && $owner != $uid) throw new Exception("No tienes permiso.");
+        if (!$game) { 
+            echo json_encode(['success' => true]); 
+            return; 
+        }
+        
+        // Un usuario puede borrar si:
+        // 1. Es SuperAdmin (Rol 1)
+        // 2. Es el Anfitrión (quien la tiene asignada)
+        // 3. Es el Creador (quien la configuró originalmente)
+        $canDelete = ($role == 1 || $game['id_anfitrion'] == $uid || $game['id_creador'] == $uid);
+        
+        if (!$canDelete) {
+            throw new Exception("No tienes permiso para borrar esta partida.");
+        }
         
         $db->prepare("DELETE FROM partidas WHERE id_partida = ?")->execute([$idPartida]);
         Logger::registrar($db, $uid, 'DELETE', 'partidas', $idPartida, null);
