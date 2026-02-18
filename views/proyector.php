@@ -552,7 +552,7 @@ $pin = $_GET['pin'] ?? '';
         let playerCount = 0;
         let prevScores = {};
         let isStarting = false;
-        window.isAdvancing = false;
+        // window.isAdvancing = false;
 
         // --- ACCIONES DE BOTONES ---
 
@@ -620,6 +620,13 @@ $pin = $_GET['pin'] ?? '';
                 }
                 gameId = json.data.id_partida;
                 document.getElementById('academyName').innerText = json.data.nombre_visual;
+                // Si la partida es nueva, forzamos la apertura de la sala
+                if (json.data.estado === 'creada') {
+                    await fetch('../api/partidas.php', {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'abrir_sala', id_partida: gameId })
+                    });
+                }
 
                 if (json.data.logo_visual) {
                     document.getElementById('userLogoLobby').src = json.data.logo_visual;
@@ -676,7 +683,7 @@ $pin = $_GET['pin'] ?? '';
             if (!gameId) return;
             try {
                 let state = null;
-                const res = await fetch(`../api/partidas.php?action=estado_juego&codigo_pin=${PIN}`);
+                const res = await fetch(`../api/partidas.php?action=estado_juego&codigo_pin=${PIN}&t=${Date.now()}`);
                 if (res.ok) {
                     const json = await res.json();
                     state = json.data;
@@ -684,8 +691,8 @@ $pin = $_GET['pin'] ?? '';
 
                 if (!state) return;
 
-                // El Shell maneja el Lobby
-                if (state.estado === 'sala_espera') {
+                // El Shell maneja el Lobby (incluyendo el estado inicial 'creada')
+                if (state.estado === 'sala_espera' || state.estado === 'creada') {
                     switchScreen('screen-lobby');
                     loadLobbyPlayers(gameId);
                 }
