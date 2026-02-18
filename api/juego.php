@@ -45,6 +45,7 @@ function unirsePartida($db, $data) {
     $pin = strtoupper(trim($data['pin'] ?? ''));
     $nick = trim($data['nick'] ?? '');
     
+    // Identificamos si es un usuario con cuenta o un invitado anónimo
     $idUsuarioRegistrado = (isset($_SESSION['user_id']) && $_SESSION['user_id'] > 0) ? $_SESSION['user_id'] : null;
     // Iniciamos en 0 para que los invitados (anonimos) tengan que elegir su personaje
     $avatarId = 0; 
@@ -61,17 +62,18 @@ function unirsePartida($db, $data) {
         }
     }
 
-    if (empty($nick)) throw new Exception("¡Ups! No puedes jugar sin un apodo.");
+    if (empty($nick)) throw new Exception("¡Ups! Introduce un apodo para poder jugar.");
     if (empty($pin)) throw new Exception("Debes introducir un PIN válido.");
     
     // 2. CONSULTA ROBUSTA: Buscamos la partida
     // IMPORTANTE: Asegúrate de que los estados coincidan exactamente con tu DB
     // Obtenemos también el slug del modo de juego
+    // Permitimos unirse incluso si la partida ya ha empezado ('jugando')
     $stmt = $db->prepare("
         SELECT p.id_partida, p.estado, m.slug 
         FROM partidas p 
         JOIN modos_juego m ON p.id_modo = m.id_modo 
-        WHERE UPPER(p.codigo_pin) = ? AND p.estado IN ('sala_espera', 'creada')
+        WHERE UPPER(p.codigo_pin) = ? AND p.estado IN ('sala_espera', 'creada', 'jugando')
     ");
     $stmt->execute([$pin]);
     $partida = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -84,7 +86,8 @@ function unirsePartida($db, $data) {
         $estadoReal = $stmtDebug->fetchColumn();
 
         if ($estadoReal) {
-            throw new Exception("La partida existe pero está en estado: " . $estadoReal . ". Solo puedes unirte si está en espera.");
+            // Ahora solo bloqueamos si la partida ya se ha cerrado definitivamente
+            throw new Exception("La partida ya ha finalizado (Estado: " . $estadoReal . "). No puedes unirte.");
         } else {
             throw new Exception("No encontramos ninguna partida con el PIN: " . $pin);
         }

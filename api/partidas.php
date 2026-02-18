@@ -469,8 +469,9 @@
             $nuevaFase = 'resultados';
         } elseif ($fase === 'resultados') {
             $nuevoIdx = $idx + 1;
+            // Buscamos la siguiente pregunta basándonos en el orden correlativo (orden 1 es idx 0, orden 2 es idx 1...)
             $stmtP = $db->prepare("SELECT id_pregunta FROM partida_preguntas WHERE id_partida = ? AND orden = ?");
-            $stmtP->execute([$idPartida, $nuevoIdx]);
+            $stmtP->execute([$idPartida, $nuevoIdx + 1]); 
             $nuevoIdPregunta = $stmtP->fetchColumn();
             
             if (!$nuevoIdPregunta) {
