@@ -97,7 +97,7 @@ $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
 <header class="top-header">
         <canvas id="bg-canvas"></canvas>
     <div class="header-left">
-        <button id="sidebarToggle" class="btn-icon mobile-only" title="Abrir Menú">
+        <button id="sidebarToggle" class="btn-icon mobile-only" title="<?php echo __('open_menu'); ?>">
             <i class="fa-solid fa-bars"></i>
         </button>
         
@@ -110,7 +110,7 @@ $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
     <div class="header-actions">
         
         <div class="dropdown-wrapper">
-            <button class="btn-icon btn-mini" onclick="toggleHeaderMenu('langMenu')" title="Cambiar Idioma">
+            <button class="btn-icon btn-mini" onclick="toggleHeaderMenu('langMenu')" title="<?php echo __('change_language'); ?>">
                 <i class="fa-solid fa-globe"></i>
             </button>
             <div id="langMenu" class="dropdown-content mini-menu">
@@ -121,7 +121,7 @@ $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
         </div>
 
         <div class="dropdown-wrapper">
-            <button class="btn-icon btn-mini" onclick="toggleHeaderMenu('colorMenu')" title="Tema de Color">
+            <button class="btn-icon btn-mini" onclick="toggleHeaderMenu('colorMenu')" title="<?php echo __('color_theme'); ?>">
                 <i class="fa-solid fa-palette"></i>
             </button>
             <div id="colorMenu" class="dropdown-content color-grid">
@@ -142,7 +142,7 @@ $currentTitle = $headerData[$vista]['title'] ?? ucfirst($vista);
             <i class="fa-solid fa-wand-magic-sparkles"></i>
         </button>
 
-        <a href="logout" onclick="sessionStorage.clear();" class="btn-icon btn-mini btn-logout-custom" title="Cerrar Sesión">
+        <a href="logout" onclick="sessionStorage.clear();" class="btn-icon btn-mini btn-logout-custom" title="<?php echo __('close_session'); ?>">
             <i class="fa-solid fa-power-off"></i>
         </a>
     </div>
