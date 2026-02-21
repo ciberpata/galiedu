@@ -339,6 +339,11 @@ async function loadGames(isAutoRefresh = false) {
                     ${badgeAsignacion}
                 </div>
                 <h3 style="margin:5px 0 5px; color:var(--primary); font-size:1.1rem;">${p.nombre_partida}</h3>
+                
+                <div style="font-size:0.9rem; font-weight:bold; color:var(--text-color); margin-bottom:5px;">
+                    <i class="fa-solid fa-layer-group"></i> Tipo: ${p.nombre_modo || 'No definido'}
+                </div>
+
                 <div class="pin-display">PIN: ${p.codigo_pin}</div>
                 <div style="margin-top:10px; font-size:0.85rem; color:var(--text-muted);">
                     <div><i class="fa-solid fa-calendar"></i> ${fecha}</div>

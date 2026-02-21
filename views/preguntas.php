@@ -156,7 +156,7 @@ $isTeacher = ($role == 3 || $role == 4);
                 </div>
                 <div>
                     <label class="block mb-2">&nbsp;</label>
-                    <button type="button" class="btn-quick-filter" onclick="clearAllFilters()" title="Limpiar todos los filtros">
+                    <button type="button" class="btn-quick-filter" onclick="clearAllFilters()" title="<?php echo __('key_clear_all_filter'); ?>">
                         <i class="fa-solid fa-eraser"></i> Limpiar Filtros
                     </button>
                 </div>
@@ -181,10 +181,10 @@ $isTeacher = ($role == 3 || $role == 4);
 
         <div class="bulk-actions-panel" id="bulkActionsPanel">
             <span style="font-weight:bold;" id="selectionCount">0 <?php echo __('key_bulk_selected'); ?></span>
-            <button class="btn-icon" onclick="bulkAction('delete')" title="Borrar selección" style="color:var(--danger-color);">
+            <button class="btn-icon" onclick="bulkAction('delete')" title="<?php echo __('qf_delete_selection'); ?>" style="color:var(--danger-color);">
                 <i class="fa-solid fa-trash"></i>
             </button>
-            <button class="btn-icon" onclick="bulkAction('restore')" title="Restaurar selección" style="color:var(--success-color);">
+            <button class="btn-icon" onclick="bulkAction('restore')" title="qf_restore_selection" style="color:var(--success-color);">
                 <i class="fa-solid fa-trash-arrow-up"></i>
             </button>
             <button class="btn-icon" onclick="openReassignModal()" title="<?php echo __('key_bulk_reassign_title'); ?>" style="margin-left: 1rem;">
