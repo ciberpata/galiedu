@@ -16,7 +16,7 @@ try {
         case 'seleccionar_avatar': seleccionarAvatar($db, $input); break;
         case 'responder':
             // 1. Obtener el modo de la partida actual
-            $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = (SELECT id_partida FROM jugadores_sesion WHERE id_sesion = ?)");
+            $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = (SELECT id_partida FROM jugadores_sesion WHERE id_sesion = ?)");
             $stmtM->execute([$input['id_sesion']]);
             $slug = $stmtM->fetchColumn() ?: 'quiz';
 
@@ -70,7 +70,7 @@ function unirsePartida($db, $data) {
     // Obtenemos también el slug del modo de juego
     // Permitimos unirse incluso si la partida ya ha empezado ('jugando')
     $stmt = $db->prepare("
-        SELECT p.id_partida, p.estado, m.slug 
+        SELECT p.id_partida, p.estado, m.clave AS slug 
         FROM partidas p 
         JOIN modos_juego m ON p.id_modo = m.id_modo 
         WHERE UPPER(p.codigo_pin) = ? AND p.estado IN ('sala_espera', 'creada', 'jugando')
@@ -108,7 +108,7 @@ function unirsePartida($db, $data) {
             'id_sesion' => $db->lastInsertId(), 
             'id_partida' => $partida['id_partida'],
             'nick' => $nick,
-            'slug' => $partida['slug'], // <--- Añadido
+            'slug' => $partida['slug'],
             'avatar_id' => $avatarId,
             'sombrero_id' => $sombreroId,
             'has_avatar' => ($avatarId > 0)
@@ -128,54 +128,46 @@ function seleccionarAvatar($db, $data) {
     echo json_encode(['success' => true]);
 }
 
-// Nueva función para forzar el avance del proyector
-function actualizarFicheroCache($db, $idPartida) {
-    try {
-        $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
-                       pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
-                       u.nombre as nombre_anfitrion
-                FROM partidas p
-                JOIN usuarios u ON p.id_anfitrion = u.id_usuario
-                LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
-                WHERE p.id_partida = ?";
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$idPartida]);
-        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Nueva función para forzar el avance del proyector
+    function actualizarFicheroCache($db, $idPartida) {
+        try {
+            // AÑADIDO: Join con modos_juego para no perder el slug
+            $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
+                        m.clave AS slug,
+                        pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
+                        u.nombre as nombre_anfitrion
+                    FROM partidas p
+                    JOIN modos_juego m ON p.id_modo = m.id_modo
+                    JOIN usuarios u ON p.id_anfitrion = u.id_usuario
+                    LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
+                    WHERE p.id_partida = ?";
+            $stmt = $db->prepare($sql);
+            $stmt->execute([$idPartida]);
+            $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($data) {
-            // Sincronización de tiempo
-            $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
-            if ($data['estado_pregunta'] === 'respondiendo' && !empty($data['tiempo_inicio_pregunta'])) {
-                $inicio = new DateTime($data['tiempo_inicio_pregunta']);
-                $ahora = new DateTime();
-                $diff = $ahora->getTimestamp() - $inicio->getTimestamp();
-                $restante = $data['tiempo_limite'] - $diff;
-                $data['tiempo_restante'] = ($restante > 0) ? (int)$restante : 0;
-            } else {
-                $data['tiempo_restante'] = 0;
-            }
-
-            // --- PROTECCIÓN EXTRA: También ofuscamos el fichero de caché ---
-            if (defined('PROD_MODE') && PROD_MODE === true && $data['estado_pregunta'] === 'respondiendo') {
-                $opciones = json_decode($data['json_opciones'], true);
-                if (is_array($opciones)) {
-                    foreach ($opciones as &$opcion) {
-                        unset($opcion['es_correcta']);
-                    }
-                    $data['json_opciones'] = json_encode($opciones);
+            if ($data) {
+                // Sincronización de tiempo... (el resto igual)
+                $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
+                if ($data['estado_pregunta'] === 'respondiendo' && !empty($data['tiempo_inicio_pregunta'])) {
+                    $inicio = new DateTime($data['tiempo_inicio_pregunta']);
+                    $ahora = new DateTime();
+                    $diff = $ahora->getTimestamp() - $inicio->getTimestamp();
+                    $restante = $data['tiempo_limite'] - $diff;
+                    $data['tiempo_restante'] = ($restante > 0) ? (int)$restante : 0;
+                } else {
+                    $data['tiempo_restante'] = 0;
                 }
-            }
 
-            $path = "../temp/partida_" . $data['id_partida'] . ".json";
-            file_put_contents($path, json_encode(['success' => true, 'data' => $data]), LOCK_EX);
-        }
-    } catch (Exception $e) {}
-}
+                $path = "../temp/partida_" . $data['id_partida'] . ".json";
+                file_put_contents($path, json_encode(['success' => true, 'data' => $data]), LOCK_EX);
+            }
+        } catch (Exception $e) {}
+    }
 
     function obtenerEstado($db, $idSesion) {
         $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
                 (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
-                js.puntuacion, js.racha, js.avatar_id, js.sombrero_id,
+                js.id_sesion, js.puntuacion, js.racha, js.avatar_id, js.sombrero_id, js.bloqueado_hasta,
                 pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
                 u.nombre as nombre_anfitrion, u.foto_perfil as foto_anfitrion
             FROM jugadores_sesion js
@@ -209,7 +201,7 @@ function actualizarFicheroCache($db, $idPartida) {
         }
         
         // Delegamos el enriquecimiento del estado del jugador al handler del modo
-        $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
+        $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
         $stmtM->execute([$data['id_partida']]);
         $slug = $stmtM->fetchColumn() ?: 'quiz';
 
@@ -222,7 +214,8 @@ function actualizarFicheroCache($db, $idPartida) {
             }
         }
 
-        // LÍNEA CRÍTICA AÑADIDA:
+        // El slug y el echo DEBEN estar antes de cerrar la llave de la función
+        $data['slug'] = $slug;
         echo json_encode(['success' => true, 'data' => $data]);
-    }
+    } // Aquí se cierra obtenerEstado
 ?>

@@ -27,11 +27,11 @@
     // --- FUNCIÓN DE OPTIMIZACIÓN (JSON CACHE) ---
     function actualizarFicheroEstado($db, $idPartida) {
         try {
-            // 1. Obtenemos los datos básicos de la partida y el modo (slug)
-            $sql = "SELECT p.*, m.slug 
-                    FROM partidas p 
-                    JOIN modos_juego m ON p.id_modo = m.id_modo 
-                    WHERE p.id_partida = ?";
+            // CORRECCIÓN 1: m.clave as slug
+            $sql = "SELECT p.*, m.clave AS slug 
+                FROM partidas p 
+                JOIN modos_juego m ON p.id_modo = m.id_modo 
+                WHERE p.id_partida = ?";
             $stmt = $db->prepare($sql);
             $stmt->execute([$idPartida]);
             $partida = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -40,20 +40,15 @@
                 $slug = $partida['slug'] ?: 'quiz';
                 $handlerPath = __DIR__ . "/../games/{$slug}/handler.php";
                 
-                // 2. AQUÍ ESTÁ EL "ENRIQUECIMIENTO":
-                // Si el juego tiene un archivo handler.php, lo cargamos
                 if (file_exists($handlerPath)) {
                     require_once $handlerPath;
-                    $funcionEnriquecer = "{$slug}_enriquecer_estado"; // Ejemplo: quiz_enriquecer_estado
+                    $funcionEnriquecer = "{$slug}_enriquecer_estado"; 
                     
-                    // Si la función existe dentro del handler.php del juego, la ejecutamos
                     if (function_exists($funcionEnriquecer)) {
-                        // Esta función añade al array $partida el texto de la pregunta, opciones, etc.
                         $partida = $funcionEnriquecer($db, $partida);
                     }
                 }
 
-                // 3. Guardamos el resultado final (ya con la pregunta incluida) en el JSON
                 $path = __DIR__ . "/../temp/partida_" . $idPartida . ".json";
                 file_put_contents($path, json_encode(['success' => true, 'data' => $partida]), LOCK_EX);
             }
@@ -65,7 +60,6 @@
     try {
         switch ($action) {
             case 'crear':
-                // Permitimos que SuperAdmin (1) y Academia (2) asignen a otros
                 $targetId = (($urole == 1 || $urole == 2) && !empty($input['target_user_id'])) ? $input['target_user_id'] : $uid;
                 crearPartida($db, $targetId, $input, $uid); 
                 break;
@@ -83,7 +77,6 @@
                 $id_partida = $input['id_partida'] ?? 0;
                 $stmt = $db->prepare("DELETE FROM jugadores_sesion WHERE id_sesion = ? AND id_partida = ?");
                 $stmt->execute([$id_sesion, $id_partida]);
-                // Muy importante: actualizar el JSON para que el alumno se entere
                 actualizarFicheroEstado($db, $id_partida);
                 echo json_encode(['success' => true]);
                 break;
@@ -100,7 +93,6 @@
             case 'iniciar_juego':
                 $id_partida = $input['id_partida'] ?? 0;
                 
-                // 1. Buscamos la primera pregunta de esta partida
                 $stmtFirst = $db->prepare("SELECT id_pregunta FROM partida_preguntas WHERE id_partida = ? ORDER BY orden ASC LIMIT 1");
                 $stmtFirst->execute([$id_partida]);
                 $idPrimera = $stmtFirst->fetchColumn();
@@ -110,7 +102,6 @@
                     exit;
                 }
 
-                // 2. IMPORTANTE: Guardamos el ID de esa pregunta en la partida
                 $stmt = $db->prepare("
                     UPDATE partidas 
                     SET estado = 'jugando', 
@@ -130,25 +121,24 @@
                 actualizarFicheroEstado($db, $input['id_partida']);
                 break;
             case 'finalizar':
-            // 1. Cambiar estado base
-            cambiarEstadoPartida($db, $uid, $urole, $input['id_partida'], 'finalizada');
-            
-            // 2. Ejecutar lógica de cierre específica del juego
-            $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
-            $stmtM->execute([$input['id_partida']]);
-            $slug = $stmtM->fetchColumn() ?: 'quiz';
+                cambiarEstadoPartida($db, $uid, $urole, $input['id_partida'], 'finalizada');
+                
+                // CORRECCIÓN 2: m.clave as slug
+                $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
+                $stmtM->execute([$input['id_partida']]);
+                $slug = $stmtM->fetchColumn() ?: 'quiz';
 
-            $handlerPath = "../games/{$slug}/handler.php";
-            if (file_exists($handlerPath)) {
-                require_once $handlerPath;
-                $funcionFinalizar = "{$slug}_finalizar_partida";
-                if (function_exists($funcionFinalizar)) {
-                    $funcionFinalizar($db, $input['id_partida']);
+                $handlerPath = "../games/{$slug}/handler.php";
+                if (file_exists($handlerPath)) {
+                    require_once $handlerPath;
+                    $funcionFinalizar = "{$slug}_finalizar_partida";
+                    if (function_exists($funcionFinalizar)) {
+                        $funcionFinalizar($db, $input['id_partida']);
+                    }
                 }
-            }
-            
-            actualizarFicheroEstado($db, $input['id_partida']);
-            break;
+                
+                actualizarFicheroEstado($db, $input['id_partida']);
+                break;
             case 'expulsar_jugador':
                 expulsarJugador($db, $uid, $input['id_sesion']);
                 break;
@@ -168,12 +158,11 @@
                 exit;
             case 'get_stats_pregunta':
                 $id_partida = $_GET['id_partida'] ?? 0;
-                // 1. Identificar el modo de juego
-                $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
+                // CORRECCIÓN 3: m.clave as slug
+                $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
                 $stmtM->execute([$id_partida]);
                 $slug = $stmtM->fetchColumn() ?: 'quiz';
 
-                // 2. Delegar al handler del juego
                 $handlerPath = "../games/{$slug}/handler.php";
                 if (file_exists($handlerPath)) {
                     require_once $handlerPath;
@@ -208,7 +197,6 @@
         $db->beginTransaction();
         try {
             $pin = generarPinUnico($db);
-            // 5 tokens para 5 columnas: pin, anfitrion, creador, modo, nombre
             $sql = "INSERT INTO partidas (codigo_pin, id_anfitrion, id_creador, id_modo, nombre_partida, estado) VALUES (?, ?, ?, ?, ?, 'creada')";
             $stmt = $db->prepare($sql);
             $stmt->execute([
@@ -240,7 +228,6 @@
         $dateFrom = $_GET['date_from'] ?? '';
         $dateTo = $_GET['date_to'] ?? '';
         
-        // NUEVO: Filtro por número de jugadores
         $minPlayers = (int)($_GET['min_players'] ?? 0);
 
         $sql = "SELECT p.*, m.nombre as nombre_modo, 
@@ -256,31 +243,25 @@
                 
         $params = [];
 
-        // Filtro de Rol
         if ($role != 1) { 
             if ($role == 2) {
-                // Academia: Sus partidas y las de sus profesores
                 $sql .= " AND (p.id_anfitrion = ? OR p.id_anfitrion IN (SELECT id_usuario FROM usuarios WHERE id_padre = ?))";
                 $params[] = $uid; $params[] = $uid;
             } elseif ($role == 6) {
-                // Alumno: Solo partidas donde haya jugado (registrado en la sesión)
                 $sql .= " AND p.id_partida IN (SELECT id_partida FROM jugadores_sesion WHERE id_usuario_registrado = ?)";
                 $params[] = $uid;
             } else {
-                // Profesores: Solo sus partidas creadas
                 $sql .= " AND p.id_anfitrion = ?"; 
                 $params[] = $uid;
             }
         }
 
-        // Filtros Búsqueda
         if (!empty($search)) {
             $sql .= " AND (p.nombre_partida LIKE ? OR p.codigo_pin LIKE ?)";
             $params[] = "%$search%";
             $params[] = "%$search%";
         }
 
-        // Filtro Estado
         if (!empty($status)) {
             if ($status === 'active') {
                 $sql .= " AND p.estado IN ('sala_espera', 'jugando')";
@@ -289,14 +270,11 @@
                 $params[] = $status;
             }
         } else {
-            // Por defecto no mostrar finalizadas.
-            // EXCEPCIONES: Si es Super Admin (1), Alumno (6) o Academia (2), mostramos TODO el historial por defecto.
             if (empty($search) && empty($dateFrom) && empty($dateTo) && $minPlayers == 0 && $role != 1 && $role != 6 && $role != 2) {
                 $sql .= " AND p.estado != 'finalizada'";
             }
         }
 
-        // Filtros Fecha
         if (!empty($dateFrom)) {
             $sql .= " AND p.fecha_inicio >= ?";
             $params[] = $dateFrom . " 00:00:00";
@@ -306,7 +284,6 @@
             $params[] = $dateTo . " 23:59:59";
         }
         
-        // NUEVO: HAVING para filtrar sobre el alias calculado
         if ($minPlayers > 0) {
             $sql .= " HAVING total_jugadores >= $minPlayers";
         }
@@ -321,7 +298,6 @@
 
     function borrarPartida($db, $uid, $role, $idPartida) {
         $idPartida = (int)$idPartida;
-        // Obtenemos tanto el anfitrión como el creador para validar permisos
         $sqlCheck = "SELECT id_anfitrion, id_creador FROM partidas WHERE id_partida = ?";
         $stmt = $db->prepare($sqlCheck);
         $stmt->execute([$idPartida]);
@@ -332,10 +308,6 @@
             return; 
         }
         
-        // Un usuario puede borrar si:
-        // 1. Es SuperAdmin (Rol 1)
-        // 2. Es el Anfitrión (quien la tiene asignada)
-        // 3. Es el Creador (quien la configuró originalmente)
         $canDelete = ($role == 1 || $game['id_anfitrion'] == $uid || $game['id_creador'] == $uid);
         
         if (!$canDelete) {
@@ -349,7 +321,6 @@
     }
 
     function verJugadores($db, $idPartida) {
-        // AÑADIDO: sombrero_id para el renderizado del proyector
         $sql = "SELECT id_sesion, nombre_nick, avatar_id, sombrero_id, puntuacion 
                 FROM jugadores_sesion 
                 WHERE id_partida = ? AND avatar_id > 0 
@@ -372,21 +343,20 @@
     }
 
     function getInfoProyector($db, $pin) {
-        $sql = "SELECT p.*, 
-                (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
-                u.nombre as nombre_profesor, u.foto_perfil as foto_profesor,
-                academia.nombre as nombre_academia, academia.foto_perfil as logo_academia
-                FROM partidas p
-                LEFT JOIN usuarios u ON p.id_anfitrion = u.id_usuario
-                LEFT JOIN usuarios academia ON u.id_padre = academia.id_usuario
-                WHERE p.codigo_pin = ?";
+        $sql = "SELECT p.*, m.clave AS slug,
+            (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
+            u.nombre as nombre_profesor, u.foto_perfil as foto_profesor,
+            academia.nombre as nombre_academia, academia.foto_perfil as logo_academia
+            FROM partidas p
+            JOIN modos_juego m ON p.id_modo = m.id_modo
+            LEFT JOIN usuarios u ON p.id_anfitrion = u.id_usuario
+            LEFT JOIN usuarios academia ON u.id_padre = academia.id_usuario
+            WHERE p.codigo_pin = ?";
         $stmt = $db->prepare($sql);
         $stmt->execute([$pin]);
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($data) {
-            // ARREGLO: Al abrir el proyector, pasamos de 'creada' a 'sala_espera' 
-            // para permitir que los alumnos entren sin recibir error de PIN.
             if ($data['estado'] === 'creada') {
                 $db->prepare("UPDATE partidas SET estado = 'sala_espera' WHERE id_partida = ?")->execute([$data['id_partida']]);
                 $data['estado'] = 'sala_espera';
@@ -406,16 +376,17 @@
     }
 
     function obtenerEstadoJuego($db, $pin) {
-        $sql = "SELECT p.id_partida, p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta,
-                    (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
-                    pr.texto as texto_pregunta, pr.json_opciones, pr.tiempo_limite, pr.tipo, pr.imagen,
-                    (SELECT COUNT(*) FROM jugadores_sesion WHERE id_partida = p.id_partida AND avatar_id > 0) as total_jugadores,
-                    (SELECT COUNT(*) FROM respuestas_log rl 
-                        JOIN jugadores_sesion js ON rl.id_sesion = js.id_sesion 
-                        WHERE js.id_partida = p.id_partida AND rl.id_pregunta = p.id_pregunta_actual) as respuestas_recibidas
-                FROM partidas p
-                LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
-                WHERE p.codigo_pin = ?";
+        $sql = "SELECT p.id_partida, p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, m.clave AS slug,
+                (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
+                pr.texto as texto_pregunta, pr.json_opciones, pr.tiempo_limite, pr.tipo, pr.imagen,
+                (SELECT COUNT(*) FROM jugadores_sesion WHERE id_partida = p.id_partida AND avatar_id > 0) as total_jugadores,
+                (SELECT COUNT(*) FROM respuestas_log rl 
+                    JOIN jugadores_sesion js ON rl.id_sesion = js.id_sesion 
+                    WHERE js.id_partida = p.id_partida AND rl.id_pregunta = p.id_pregunta_actual) as respuestas_recibidas
+            FROM partidas p
+            JOIN modos_juego m ON p.id_modo = m.id_modo
+            LEFT JOIN preguntas pr ON p.id_pregunta_actual = pr.id_pregunta
+            WHERE p.codigo_pin = ?";
         
         $stmt = $db->prepare($sql);
         $stmt->execute([$pin]);
@@ -424,7 +395,6 @@
         if ($data) {
             $data['tiempo_limite'] = (int)($data['tiempo_limite'] ?? 0);
             
-            // 1. CALCULAMOS EL TIEMPO RESTANTE REAL DESDE EL SERVIDOR
             if ($data['estado_pregunta'] === 'respondiendo' && !empty($data['tiempo_inicio_pregunta'])) {
                 $inicio = new DateTime($data['tiempo_inicio_pregunta']);
                 $ahora = new DateTime();
@@ -435,13 +405,10 @@
                 $data['tiempo_restante'] = 0;
             }
 
-            // 2. --- PROTECCIÓN: Ofuscar respuesta correcta en modo producción ---
-            // Solo borramos la respuesta si el interruptor PROD_MODE está activo y están respondiendo
             if (defined('PROD_MODE') && PROD_MODE === true && $data['estado_pregunta'] === 'respondiendo') {
                 $opciones = json_decode($data['json_opciones'], true);
                 if (is_array($opciones)) {
                     foreach ($opciones as &$opcion) {
-                        // Eliminamos el campo que indica si la respuesta es correcta
                         unset($opcion['es_correcta']); 
                     }
                     $data['json_opciones'] = json_encode($opciones);
@@ -460,7 +427,6 @@
         
         if (!$primera) throw new Exception("La partida no tiene preguntas.");
         
-        // Forzamos el inicio en pregunta 1, fase intro
         $sql = "UPDATE partidas SET 
                 estado = 'jugando', 
                 pregunta_actual_index = 1, 
@@ -494,7 +460,6 @@
             $nuevaFase = 'resultados';
         } elseif ($fase === 'resultados') {
             $nuevoIdx = $idx + 1;
-            // Buscamos la siguiente pregunta basándonos en el orden correlativo (orden 1 es idx 0, orden 2 es idx 1...)
             $stmtP = $db->prepare("SELECT id_pregunta FROM partida_preguntas WHERE id_partida = ? AND orden = ?");
             $stmtP->execute([$idPartida, $nuevoIdx + 1]); 
             $nuevoIdPregunta = $stmtP->fetchColumn();
@@ -508,7 +473,6 @@
             $nuevaFase = 'intro';
         }
 
-        // Construcción dinámica de la query para actualizar el ID de pregunta solo cuando cambia
         $sql = "UPDATE partidas SET estado_pregunta = ?, pregunta_actual_index = ?";
         $params = [$nuevaFase, $nuevoIdx];
         
@@ -544,22 +508,20 @@
     }
 
     function getRankingParcial($db, $idPartida) {
-        // 1. Identificar el modo de juego
-        $stmtM = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
-        $stmtM->execute([$idPartida]);
-        $slug = $stmtM->fetchColumn() ?: 'quiz';
+    // Usamos m.clave para asegurar que cargamos el handler correcto
+    $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
+    $stmtM->execute([$idPartida]);
+    $clave = $stmtM->fetchColumn() ?: 'quiz';
 
-        // 2. Delegar al handler del juego
-        $handlerPath = "../games/{$slug}/handler.php";
-        if (file_exists($handlerPath)) {
-            require_once $handlerPath;
-            $funcionRanking = "{$slug}_obtener_ranking";
-            if (function_exists($funcionRanking)) {
-                echo json_encode(['success' => true, 'ranking' => $funcionRanking($db, $idPartida)]);
-                return;
-            }
+    $handlerPath = dirname(__DIR__) . "/games/{$clave}/handler.php";
+    if (file_exists($handlerPath)) {
+        require_once $handlerPath;
+        $funcionRanking = "{$clave}_obtener_ranking";
+        if (function_exists($funcionRanking)) {
+            echo json_encode(['success' => true, 'ranking' => $funcionRanking($db, $idPartida)]);
+            return;
         }
-        // Fallback por si el modo no tiene ranking propio
-        echo json_encode(['success' => true, 'ranking' => []]);
     }
+    echo json_encode(['success' => true, 'ranking' => []]);
+}
 ?>
