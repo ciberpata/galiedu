@@ -121,23 +121,36 @@
                 actualizarFicheroEstado($db, $input['id_partida']);
                 break;
             case 'finalizar':
-                cambiarEstadoPartida($db, $uid, $urole, $input['id_partida'], 'finalizada');
-                
-                // CORRECCIÓN 2: m.clave as slug
-                $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
-                $stmtM->execute([$input['id_partida']]);
-                $slug = $stmtM->fetchColumn() ?: 'quiz';
+                $id_partida_fin = (int)($input['id_partida'] ?? 0);
+                // Verificar permisos: anfitrion, creador, o roles admin (1 y 2)
+                $stmtOwner = $db->prepare("SELECT id_anfitrion, id_creador FROM partidas WHERE id_partida = ?");
+                $stmtOwner->execute([$id_partida_fin]);
+                $ownerRow = $stmtOwner->fetch(PDO::FETCH_ASSOC);
+                $owner   = $ownerRow['id_anfitrion'] ?? 0;
+                $creador = $ownerRow['id_creador']   ?? 0;
+                if ($urole != 1 && $urole != 2 && $owner != $uid && $creador != $uid) {
+                    echo json_encode(['success' => false, 'error' => 'No es tu partida.']);
+                    break;
+                }
+                // Actualizar estado directamente (sin echo intermedio)
+                $db->prepare("UPDATE partidas SET estado = 'finalizada' WHERE id_partida = ?")->execute([$id_partida_fin]);
+                Logger::registrar($db, $uid, 'UPDATE', 'partidas', $id_partida_fin, ['estado' => 'finalizada']);
 
-                $handlerPath = "../games/{$slug}/handler.php";
+                // Cargar handler del modo por si tiene lógica de cierre
+                $stmtM = $db->prepare("SELECT m.clave AS slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.id_partida = ?");
+                $stmtM->execute([$id_partida_fin]);
+                $slug = $stmtM->fetchColumn() ?: 'quiz';
+                $handlerPath = dirname(__DIR__) . "/games/{$slug}/handler.php";
                 if (file_exists($handlerPath)) {
                     require_once $handlerPath;
                     $funcionFinalizar = "{$slug}_finalizar_partida";
                     if (function_exists($funcionFinalizar)) {
-                        $funcionFinalizar($db, $input['id_partida']);
+                        $funcionFinalizar($db, $id_partida_fin);
                     }
                 }
-                
-                actualizarFicheroEstado($db, $input['id_partida']);
+                actualizarFicheroEstado($db, $id_partida_fin);
+                // Un único echo al final
+                echo json_encode(['success' => true, 'nuevo_estado' => 'finalizada']);
                 break;
             case 'expulsar_jugador':
                 expulsarJugador($db, $uid, $input['id_sesion']);
@@ -163,7 +176,7 @@
                 $stmtM->execute([$id_partida]);
                 $slug = $stmtM->fetchColumn() ?: 'quiz';
 
-                $handlerPath = "../games/{$slug}/handler.php";
+                $handlerPath = dirname(__DIR__) . "/games/{$slug}/handler.php";
                 if (file_exists($handlerPath)) {
                     require_once $handlerPath;
                     $funcionStats = "{$slug}_obtener_stats_pregunta";
@@ -323,7 +336,7 @@
     function verJugadores($db, $idPartida) {
         $sql = "SELECT id_sesion, nombre_nick, avatar_id, sombrero_id, puntuacion 
                 FROM jugadores_sesion 
-                WHERE id_partida = ? AND avatar_id > 0 
+                WHERE id_partida = ? AND avatar_id > 0
                 ORDER BY puntuacion DESC";
         $stmt = $db->prepare($sql);
         $stmt->execute([$idPartida]);
@@ -376,10 +389,10 @@
     }
 
     function obtenerEstadoJuego($db, $pin) {
-        $sql = "SELECT p.id_partida, p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, m.clave AS slug,
+        $sql = "SELECT p.id_partida, p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.codigo_pin, m.clave AS slug,
                 (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
                 pr.texto as texto_pregunta, pr.json_opciones, pr.tiempo_limite, pr.tipo, pr.imagen,
-                (SELECT COUNT(*) FROM jugadores_sesion WHERE id_partida = p.id_partida AND avatar_id > 0) as total_jugadores,
+                (SELECT COUNT(*) FROM jugadores_sesion WHERE id_partida = p.id_partida) as total_jugadores,
                 (SELECT COUNT(*) FROM respuestas_log rl 
                     JOIN jugadores_sesion js ON rl.id_sesion = js.id_sesion 
                     WHERE js.id_partida = p.id_partida AND rl.id_pregunta = p.id_pregunta_actual) as respuestas_recibidas

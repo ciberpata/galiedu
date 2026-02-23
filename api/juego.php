@@ -167,7 +167,7 @@ function seleccionarAvatar($db, $data) {
     function obtenerEstado($db, $idSesion) {
         $sql = "SELECT p.estado, p.estado_pregunta, p.pregunta_actual_index, p.tiempo_inicio_pregunta, p.id_partida, p.codigo_pin,
                 (SELECT COUNT(*) FROM partida_preguntas WHERE id_partida = p.id_partida) as total_preguntas,
-                js.id_sesion, js.puntuacion, js.racha, js.avatar_id, js.sombrero_id, js.bloqueado_hasta,
+                js.id_sesion, js.puntuacion, js.racha, js.avatar_id, js.sombrero_id, js.bloqueado_hasta,    
                 pr.texto as texto_pregunta, pr.json_opciones, pr.tipo, pr.tiempo_limite,
                 u.nombre as nombre_anfitrion, u.foto_perfil as foto_anfitrion
             FROM jugadores_sesion js
@@ -205,7 +205,7 @@ function seleccionarAvatar($db, $data) {
         $stmtM->execute([$data['id_partida']]);
         $slug = $stmtM->fetchColumn() ?: 'quiz';
 
-        $handlerPath = "../games/{$slug}/handler.php";
+        $handlerPath = dirname(__DIR__) . "/games/{$slug}/handler.php";
         if (file_exists($handlerPath)) {
             require_once $handlerPath;
             $funcionEnriquecer = "{$slug}_enriquecer_estado_jugador";
