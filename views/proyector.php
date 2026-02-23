@@ -528,7 +528,7 @@ $pin = $_GET['pin'] ?? '';
     
     <?php 
         // Buscamos el modo de juego en la BD
-        $stmtSlug = $db->prepare("SELECT m.slug FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.codigo_pin = ?");
+        $stmtSlug = $db->prepare("SELECT m.clave FROM partidas p JOIN modos_juego m ON p.id_modo = m.id_modo WHERE p.codigo_pin = ?");
         $stmtSlug->execute([$pin]);
         $slugPartida = $stmtSlug->fetchColumn() ?: 'quiz';
         
@@ -578,6 +578,7 @@ $pin = $_GET['pin'] ?? '';
             btn.disabled = true;
             const res = await fetch('../api/partidas.php', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'finalizar',
                     id_partida: gameId
@@ -629,12 +630,14 @@ $pin = $_GET['pin'] ?? '';
                 }
 
                 if (json.data.logo_visual) {
-                    document.getElementById('userLogoLobby').src = json.data.logo_visual;
-                    document.getElementById('userLogoGame').src = json.data.logo_visual;
+                    const logoLobby = document.getElementById('userLogoLobby');
+                    const logoGame = document.getElementById('userLogoGame');
+                    if (logoLobby) logoLobby.src = json.data.logo_visual;
+                    if (logoGame) logoGame.src = json.data.logo_visual;
                 }
 
                 setInterval(syncLoop, 1000);
-            } catch (e) {}
+            } catch (e) { console.error('Error en init():', e); }
         }
 
         async function loadLobbyPlayers(id) {
